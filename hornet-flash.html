@@ -1,0 +1,622 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Hornet Flash</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color: transparent; }
+  html, body {
+    height:100%;
+    background:#0d0a05;
+    overflow:hidden;
+    touch-action:none;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  }
+  #stage { position:relative; width:100%; height:100%; }
+  canvas { display:block; width:100%; height:100%; background:radial-gradient(circle at 50% 40%, #241a08 0%, #0d0a05 70%); }
+
+  #hud {
+    position:absolute; top:0; left:0; right:0;
+    display:flex; justify-content:space-between; align-items:flex-start;
+    padding:10px 12px;
+    pointer-events:none;
+    color:#fff;
+  }
+  #hud .box {
+    background:rgba(20,14,4,0.65);
+    border:1px solid #5a3d10;
+    border-radius:10px;
+    padding:6px 12px;
+    font-size:13px;
+  }
+  #hud .label { color:#b8934a; font-size:10px; letter-spacing:1px; display:block; }
+  #hud .val { color:#FFD23F; font-weight:bold; font-size:17px; }
+  #timerBox { text-align:center; }
+  #board { min-width:140px; }
+  #board .row { display:flex; justify-content:space-between; gap:8px; font-size:12px; padding:1px 0; }
+  #board .me { color:#FFD23F; font-weight:bold; }
+
+  #pad {
+    position:absolute; bottom:14px; left:14px;
+    display:grid;
+    grid-template-columns:52px 52px 52px;
+    grid-template-rows:52px 52px 52px;
+    gap:4px;
+    opacity:0.85;
+  }
+  #pad button {
+    background:rgba(90,61,16,0.55);
+    border:1px solid #7a5420;
+    color:#FFD23F;
+    border-radius:10px;
+    font-size:20px;
+  }
+  #up { grid-column:2; grid-row:1; }
+  #left { grid-column:1; grid-row:2; }
+  #down { grid-column:2; grid-row:3; }
+  #right { grid-column:3; grid-row:2; }
+  #mid { grid-column:2; grid-row:2; background:transparent; border:none; }
+
+  #overlay {
+    position:absolute; inset:0;
+    background:rgba(8,6,2,0.92);
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    color:#fff; text-align:center; padding:20px;
+    gap:14px;
+  }
+  #overlay h1 { color:#FFD23F; font-size:30px; letter-spacing:2px; }
+  #overlay p { color:#d9c08f; font-size:14px; max-width:320px; line-height:1.5; }
+  .skins { display:flex; gap:12px; flex-wrap:wrap; justify-content:center; max-width:340px; }
+  .skinBtn {
+    width:64px; height:64px; border-radius:14px;
+    border:2px solid #5a3d10;
+    background:#1a1206;
+    display:flex; align-items:center; justify-content:center;
+    position:relative;
+  }
+  .skinBtn.selected { border-color:#FFD23F; box-shadow:0 0 10px #FFD23F; }
+  .skinBtn canvas { pointer-events:none; }
+  .skinName { font-size:10px; color:#d9c08f; margin-top:4px; }
+  .skinWrap { display:flex; flex-direction:column; align-items:center; gap:2px; }
+  #startBtn, #retryBtn {
+    margin-top:6px;
+    padding:12px 34px;
+    background:#FFD23F;
+    color:#1a1206;
+    border:none;
+    border-radius:22px;
+    font-weight:bold;
+    font-size:16px;
+  }
+  #finalBoard { font-size:14px; color:#d9c08f; margin-top:6px; }
+  #finalBoard .row { display:flex; justify-content:space-between; gap:20px; }
+  #finalBoard .me { color:#FFD23F; font-weight:bold; }
+  .hidden { display:none !important; }
+</style>
+</head>
+<body>
+<div id="stage">
+  <canvas id="game"></canvas>
+
+  <div id="hud" class="hidden">
+    <div class="box" id="sizeBox">
+      <span class="label">SIZE</span>
+      <span class="val" id="sizeVal">0</span>
+    </div>
+    <div class="box" id="timerBox">
+      <span class="label">TIME LEFT</span>
+      <span class="val" id="timerVal">2:00</span>
+    </div>
+    <div class="box" id="board">
+      <span class="label">LEADERBOARD</span>
+      <div id="boardRows"></div>
+    </div>
+  </div>
+
+  <div id="pad" class="hidden">
+    <button id="up">▲</button>
+    <button id="left">◀</button>
+    <button id="mid"></button>
+    <button id="right">▶</button>
+    <button id="down">▼</button>
+  </div>
+
+  <div id="overlay">
+    <h1>🐝 HORNET FLASH</h1>
+    <p>Eat smaller hornets to grow. Avoid bigger ones or they'll eat you. Whoever's biggest when time runs out wins. Move with arrow keys, the on-screen pad, or drag anywhere on screen.</p>
+    <div class="skins" id="skinPicker"></div>
+    <button id="startBtn">START</button>
+  </div>
+</div>
+
+<script>
+(function(){
+  const canvas = document.getElementById('game');
+  const ctx = canvas.getContext('2d');
+  function resizeCanvas(){
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+  }
+  window.addEventListener('resize', resizeCanvas);
+  resizeCanvas();
+
+  // ---------- Skins ----------
+  const SKINS = [
+    { name:'Classic',  body:'#F5A623', stripe:'#141414', wing:'rgba(255,255,255,0.55)' },
+    { name:'Crimson',  body:'#E53946', stripe:'#1a0505', wing:'rgba(255,200,200,0.5)' },
+    { name:'Toxic',    body:'#7ED321', stripe:'#0d1a02', wing:'rgba(220,255,200,0.5)' },
+    { name:'Cyber',    body:'#4AD3FF', stripe:'#031522', wing:'rgba(200,240,255,0.55)' },
+    { name:'Shadow',   body:'#8859C4', stripe:'#0a0512', wing:'rgba(220,200,255,0.5)' },
+    { name:'Golden',   body:'#FFE066', stripe:'#4a3400', wing:'rgba(255,255,255,0.6)' }
+  ];
+  let chosenSkin = 0;
+
+  function drawSkinPreview(cvs, skin){
+    const c = cvs.getContext('2d');
+    c.clearRect(0,0,cvs.width,cvs.height);
+    drawHornetShape(c, cvs.width/2, cvs.height/2, 18, 0, skin, 1);
+  }
+
+  const skinPicker = document.getElementById('skinPicker');
+  SKINS.forEach((skin, i)=>{
+    const wrap = document.createElement('div');
+    wrap.className = 'skinWrap';
+    const btn = document.createElement('button');
+    btn.className = 'skinBtn' + (i===0 ? ' selected' : '');
+    const prevCanvas = document.createElement('canvas');
+    prevCanvas.width = 56; prevCanvas.height = 56;
+    btn.appendChild(prevCanvas);
+    btn.addEventListener('click', ()=>{
+      chosenSkin = i;
+      document.querySelectorAll('.skinBtn').forEach(b=>b.classList.remove('selected'));
+      btn.classList.add('selected');
+    });
+    wrap.appendChild(btn);
+    const label = document.createElement('div');
+    label.className = 'skinName';
+    label.textContent = skin.name;
+    wrap.appendChild(label);
+    skinPicker.appendChild(wrap);
+    requestAnimationFrame(()=> drawSkinPreview(prevCanvas, skin));
+  });
+
+  // ---------- World ----------
+  const WORLD = { w: 4200, h: 3000 };
+  const MATCH_SECONDS = 120;
+  let entities = [];
+  let player = null;
+  let running = false;
+  let matchTimer = MATCH_SECONDS;
+  let idCounter = 1;
+
+  function massToRadius(mass){ return 10 + Math.sqrt(mass) * 3.1; }
+
+  function randPos(){
+    return { x: 60 + Math.random()*(WORLD.w-120), y: 60 + Math.random()*(WORLD.h-120) };
+  }
+
+  function randPosAwayFromCenter(minDist){
+    let p;
+    let tries = 0;
+    do {
+      p = randPos();
+      tries++;
+    } while (Math.hypot(p.x - WORLD.w/2, p.y - WORLD.h/2) < minDist && tries < 30);
+    return p;
+  }
+
+  function rollMass(){
+    const r = Math.random();
+    if (r < 0.65) return 5 + Math.random()*11;       // small
+    else if (r < 0.9) return 18 + Math.random()*27;   // medium
+    else return 55 + Math.random()*75;                // large
+  }
+
+  function spawnBot(mass){
+    const p = randPos();
+    const skin = SKINS[Math.floor(Math.random()*SKINS.length)];
+    return {
+      id: idCounter++,
+      x:p.x, y:p.y,
+      vx:0, vy:0,
+      mass: mass,
+      radius: massToRadius(mass),
+      skin,
+      isPlayer:false,
+      wander:{ang:Math.random()*Math.PI*2, t:0},
+      dead:false,
+      wingPhase: Math.random()*10
+    };
+  }
+
+  function spawnPlayer(){
+    const p = { x: WORLD.w/2, y: WORLD.h/2 };
+    return {
+      id: 0,
+      x:p.x, y:p.y,
+      vx:0, vy:0,
+      mass: 32,
+      radius: massToRadius(32),
+      skin: SKINS[chosenSkin],
+      isPlayer:true,
+      dead:false,
+      wingPhase:0
+    };
+  }
+
+  const BOT_TARGET_COUNT = 34;
+
+  function populateBots(){
+    entities = [];
+    for (let i=0;i<BOT_TARGET_COUNT;i++){
+      const mass = rollMass();
+      const bot = spawnBot(mass);
+      const p = randPosAwayFromCenter(650);
+      bot.x = p.x; bot.y = p.y;
+      entities.push(bot);
+    }
+  }
+
+  // ---------- Input ----------
+  const keys = { up:false, down:false, left:false, right:false };
+  let dragVec = null; // {x,y} normalized direction from touch, null if not dragging
+
+  window.addEventListener('keydown', e=>{
+    if (e.key==='ArrowUp'||e.key==='w'||e.key==='W') keys.up=true;
+    if (e.key==='ArrowDown'||e.key==='s'||e.key==='S') keys.down=true;
+    if (e.key==='ArrowLeft'||e.key==='a'||e.key==='A') keys.left=true;
+    if (e.key==='ArrowRight'||e.key==='d'||e.key==='D') keys.right=true;
+  });
+  window.addEventListener('keyup', e=>{
+    if (e.key==='ArrowUp'||e.key==='w'||e.key==='W') keys.up=false;
+    if (e.key==='ArrowDown'||e.key==='s'||e.key==='S') keys.down=false;
+    if (e.key==='ArrowLeft'||e.key==='a'||e.key==='A') keys.left=false;
+    if (e.key==='ArrowRight'||e.key==='d'||e.key==='D') keys.right=false;
+  });
+
+  function bindPadBtn(id, key){
+    const el = document.getElementById(id);
+    const on = (e)=>{ if(e) e.preventDefault(); keys[key]=true; };
+    const off = (e)=>{ if(e) e.preventDefault(); keys[key]=false; };
+    el.addEventListener('touchstart', on, {passive:false});
+    el.addEventListener('touchend', off, {passive:false});
+    el.addEventListener('touchcancel', off, {passive:false});
+    el.addEventListener('mousedown', on);
+    el.addEventListener('mouseup', off);
+    el.addEventListener('mouseleave', off);
+  }
+  bindPadBtn('up','up');
+  bindPadBtn('down','down');
+  bindPadBtn('left','left');
+  bindPadBtn('right','right');
+
+  canvas.addEventListener('touchstart', e=>{
+    const t = e.touches[0];
+    updateDrag(t.clientX, t.clientY);
+  }, {passive:true});
+  canvas.addEventListener('touchmove', e=>{
+    const t = e.touches[0];
+    updateDrag(t.clientX, t.clientY);
+  }, {passive:true});
+  canvas.addEventListener('touchend', ()=>{ dragVec = null; }, {passive:true});
+
+  function updateDrag(cx, cy){
+    const dx = cx - canvas.width/2;
+    const dy = cy - canvas.height/2;
+    const len = Math.hypot(dx,dy) || 1;
+    if (len < 20){ dragVec = null; return; }
+    dragVec = { x: dx/len, y: dy/len };
+  }
+
+  // ---------- Game logic ----------
+  function dist(a,b){ return Math.hypot(a.x-b.x, a.y-b.y); }
+
+  function canEat(a,b){
+    return a.mass > b.mass * 1.15 && dist(a,b) < a.radius*0.95 + b.radius*0.15;
+  }
+
+  function clampToWorld(e){
+    e.x = Math.max(e.radius, Math.min(WORLD.w-e.radius, e.x));
+    e.y = Math.max(e.radius, Math.min(WORLD.h-e.radius, e.y));
+  }
+
+  function updateBotAI(bot, dt){
+    // find nearest prey and nearest threat within vision
+    const vision = 260 + bot.radius*1.5;
+    const huntRange = vision * 0.6;
+    let preyTarget=null, preyDist=Infinity;
+    let threat=null, threatDist=Infinity;
+    const all = player && !player.dead ? entities.concat([player]) : entities;
+    for (const other of all){
+      if (other===bot || other.dead) continue;
+      const d = dist(bot, other);
+      if (d > vision) continue;
+      if (bot.mass > other.mass * 1.15){
+        if (d < huntRange && d < preyDist){ preyDist = d; preyTarget = other; }
+      } else if (other.mass > bot.mass * 1.15){
+        if (d < threatDist){ threatDist = d; threat = other; }
+      }
+    }
+    let dx=0, dy=0;
+    if (threat && threatDist < vision*0.7){
+      dx = bot.x - threat.x; dy = bot.y - threat.y;
+    } else if (preyTarget){
+      dx = preyTarget.x - bot.x; dy = preyTarget.y - bot.y;
+    } else {
+      bot.wander.t -= dt;
+      if (bot.wander.t <= 0){
+        bot.wander.ang = Math.random()*Math.PI*2;
+        bot.wander.t = 1.5 + Math.random()*2;
+      }
+      dx = Math.cos(bot.wander.ang);
+      dy = Math.sin(bot.wander.ang);
+    }
+    const len = Math.hypot(dx,dy) || 1;
+    const speed = Math.max(30, 120 - bot.radius*0.9);
+    bot.vx = (dx/len) * speed;
+    bot.vy = (dy/len) * speed;
+    bot.x += bot.vx * dt;
+    bot.y += bot.vy * dt;
+    clampToWorld(bot);
+  }
+
+  function updatePlayer(dt){
+    let dx=0, dy=0;
+    if (dragVec){ dx=dragVec.x; dy=dragVec.y; }
+    else {
+      if (keys.up) dy -= 1;
+      if (keys.down) dy += 1;
+      if (keys.left) dx -= 1;
+      if (keys.right) dx += 1;
+    }
+    const len = Math.hypot(dx,dy);
+    if (len > 0){
+      dx/=len; dy/=len;
+      const speed = Math.max(45, 150 - player.radius*0.9);
+      player.vx = dx*speed;
+      player.vy = dy*speed;
+    } else {
+      player.vx *= 0.8;
+      player.vy *= 0.8;
+    }
+    player.x += player.vx*dt;
+    player.y += player.vy*dt;
+    clampToWorld(player);
+  }
+
+  function growMass(entity, eatenMass){
+    entity.mass += eatenMass * 0.72;
+    entity.radius = massToRadius(entity.mass);
+  }
+
+  function handleEating(){
+    const all = player && !player.dead ? [player, ...entities] : entities;
+    for (let i=0;i<all.length;i++){
+      const a = all[i];
+      if (a.dead) continue;
+      for (let j=0;j<all.length;j++){
+        if (i===j) continue;
+        const b = all[j];
+        if (b.dead) continue;
+        if (canEat(a,b)){
+          growMass(a, b.mass);
+          b.dead = true;
+          if (b.isPlayer){
+            playerDied();
+          }
+        }
+      }
+    }
+    entities = entities.filter(e=>!e.dead);
+    while (entities.length < BOT_TARGET_COUNT){
+      entities.push(spawnBot(rollMass()));
+    }
+  }
+
+  function currentRanking(){
+    const all = player && !player.dead ? [player, ...entities] : entities.slice();
+    return all.slice().sort((a,b)=> b.mass - a.mass);
+  }
+
+  function updateBoard(){
+    const ranking = currentRanking();
+    const rowsEl = document.getElementById('boardRows');
+    rowsEl.innerHTML = '';
+    const top = ranking.slice(0,5);
+    top.forEach((e,i)=>{
+      const row = document.createElement('div');
+      row.className = 'row' + (e.isPlayer ? ' me' : '');
+      row.textContent = (i+1) + '. ' + (e.isPlayer ? 'You' : 'Hornet') + ' — ' + Math.round(e.mass);
+      rowsEl.appendChild(row);
+    });
+    if (player && !player.dead){
+      const rank = ranking.findIndex(e=>e.isPlayer) + 1;
+      if (rank > 5){
+        const row = document.createElement('div');
+        row.className = 'row me';
+        row.textContent = rank + '. You — ' + Math.round(player.mass);
+        rowsEl.appendChild(row);
+      }
+    }
+  }
+
+  // ---------- Rendering ----------
+  function drawHornetShape(c, sx, sy, radius, wingPhase, skin, scale){
+    scale = scale || 1;
+    c.save();
+    c.translate(sx, sy);
+    // wings
+    const wingFlap = Math.sin(wingPhase) * 0.3;
+    c.fillStyle = skin.wing;
+    c.beginPath();
+    c.ellipse(-radius*0.55, -radius*0.1, radius*0.55, radius*0.28, -0.4+wingFlap, 0, Math.PI*2);
+    c.fill();
+    c.beginPath();
+    c.ellipse(radius*0.55, -radius*0.1, radius*0.55, radius*0.28, 0.4-wingFlap, 0, Math.PI*2);
+    c.fill();
+    // body
+    c.fillStyle = skin.body;
+    c.beginPath();
+    c.ellipse(0,0, radius*0.62, radius*0.85, 0, 0, Math.PI*2);
+    c.fill();
+    // stripes
+    c.fillStyle = skin.stripe;
+    for (let s=-1; s<=1; s++){
+      c.beginPath();
+      c.ellipse(0, s*radius*0.32, radius*0.62, radius*0.13, 0, 0, Math.PI*2);
+      c.fill();
+    }
+    // head
+    c.beginPath();
+    c.arc(0, -radius*0.82, radius*0.32, 0, Math.PI*2);
+    c.fillStyle = skin.stripe;
+    c.fill();
+    // stinger
+    c.beginPath();
+    c.moveTo(-radius*0.12, radius*0.85);
+    c.lineTo(radius*0.12, radius*0.85);
+    c.lineTo(0, radius*1.15);
+    c.closePath();
+    c.fillStyle = skin.stripe;
+    c.fill();
+    c.restore();
+  }
+
+  let cameraX = WORLD.w/2, cameraY = WORLD.h/2, zoom = 1;
+
+  function draw(){
+    ctx.fillStyle = '#0d0a05';
+    ctx.fillRect(0,0,canvas.width,canvas.height);
+
+    if (player){
+      cameraX += (player.x - cameraX)*0.12;
+      cameraY += (player.y - cameraY)*0.12;
+      const targetZoom = Math.max(0.45, Math.min(1.15, 34/player.radius));
+      zoom += (targetZoom - zoom)*0.06;
+    }
+
+    ctx.save();
+    ctx.translate(canvas.width/2, canvas.height/2);
+    ctx.scale(zoom, zoom);
+    ctx.translate(-cameraX, -cameraY);
+
+    // world bounds + grid
+    ctx.strokeStyle = '#3a2a10';
+    ctx.lineWidth = 6;
+    ctx.strokeRect(0,0,WORLD.w,WORLD.h);
+    ctx.strokeStyle = 'rgba(90,61,16,0.25)';
+    ctx.lineWidth = 1;
+    const grid = 150;
+    for (let x=0;x<=WORLD.w;x+=grid){
+      ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,WORLD.h); ctx.stroke();
+    }
+    for (let y=0;y<=WORLD.h;y+=grid){
+      ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(WORLD.w,y); ctx.stroke();
+    }
+
+    for (const e of entities){
+      drawHornetShape(ctx, e.x, e.y, e.radius, e.wingPhase, e.skin, 1);
+    }
+    if (player && !player.dead){
+      drawHornetShape(ctx, player.x, player.y, player.radius, player.wingPhase, player.skin, 1);
+    }
+
+    ctx.restore();
+  }
+
+  // ---------- Flow control ----------
+  let gameOverShown = false;
+
+  function playerDied(){
+    if (gameOverShown) return;
+    gameOverShown = true;
+    running = false;
+    showEndOverlay('Stung Out!', 'A bigger hornet got you.');
+  }
+
+  function endMatch(){
+    running = false;
+    const ranking = currentRanking();
+    const winnerIsPlayer = ranking[0] && ranking[0].isPlayer;
+    showEndOverlay(winnerIsPlayer ? 'You Win! 🏆' : "Time's Up!", winnerIsPlayer ? 'Your hornet grew the biggest!' : 'Another hornet grew bigger this round.');
+  }
+
+  function showEndOverlay(title, subtitle){
+    const overlay = document.getElementById('overlay');
+    overlay.innerHTML = '';
+    const h1 = document.createElement('h1'); h1.textContent = title;
+    const p = document.createElement('p'); p.textContent = subtitle;
+    const finalBoard = document.createElement('div');
+    finalBoard.id = 'finalBoard';
+    const ranking = currentRanking().slice(0,5);
+    ranking.forEach((e,i)=>{
+      const row = document.createElement('div');
+      row.className = 'row' + (e.isPlayer ? ' me' : '');
+      row.textContent = (i+1) + '. ' + (e.isPlayer ? 'You' : 'Hornet') + ' — ' + Math.round(e.mass);
+      finalBoard.appendChild(row);
+    });
+    const retryBtn = document.createElement('button');
+    retryBtn.id = 'retryBtn';
+    retryBtn.textContent = 'PLAY AGAIN';
+    retryBtn.addEventListener('click', startGame);
+    overlay.appendChild(h1);
+    overlay.appendChild(p);
+    overlay.appendChild(finalBoard);
+    overlay.appendChild(retryBtn);
+    overlay.style.display = 'flex';
+    document.getElementById('hud').classList.add('hidden');
+    document.getElementById('pad').classList.add('hidden');
+  }
+
+  function formatTime(s){
+    const m = Math.floor(s/60);
+    const sec = Math.floor(s%60);
+    return m + ':' + (sec<10?'0':'') + sec;
+  }
+
+  function startGame(){
+    gameOverShown = false;
+    populateBots();
+    player = spawnPlayer();
+    matchTimer = MATCH_SECONDS;
+    cameraX = player.x; cameraY = player.y; zoom = 1;
+    document.getElementById('overlay').style.display = 'none';
+    document.getElementById('hud').classList.remove('hidden');
+    document.getElementById('pad').classList.remove('hidden');
+    running = true;
+  }
+
+  document.getElementById('startBtn').addEventListener('click', startGame);
+
+  // ---------- Loop ----------
+  let lastTime = 0;
+  function loop(ts){
+    const dt = Math.min((ts-lastTime)/1000, 0.05) || 0;
+    lastTime = ts;
+
+    if (running){
+      updatePlayer(dt);
+      for (const bot of entities) updateBotAI(bot, dt);
+      handleEating();
+      if (player) player.wingPhase += dt*14;
+      for (const bot of entities) bot.wingPhase += dt*14;
+      matchTimer -= dt;
+      if (matchTimer <= 0){
+        matchTimer = 0;
+        endMatch();
+      }
+      document.getElementById('sizeVal').textContent = Math.round(player.mass);
+      document.getElementById('timerVal').textContent = formatTime(matchTimer);
+      updateBoard();
+    }
+    draw();
+    requestAnimationFrame(loop);
+  }
+
+  populateBots();
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
