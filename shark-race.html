@@ -1,0 +1,542 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Shark Race</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color: transparent; }
+  html, body {
+    height:100%;
+    background:#012a3e;
+    overflow:hidden;
+    touch-action:none;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  }
+  #stage { position:relative; width:100%; height:100%; }
+  canvas { display:block; width:100%; height:100%; }
+
+  .hidden { display:none !important; }
+
+  #hud {
+    position:absolute; top:0; left:0; right:0;
+    padding:10px 12px;
+    pointer-events:none;
+  }
+  #raceTrack {
+    background:rgba(1,20,30,0.65);
+    border:1px solid #0f6a8a;
+    border-radius:12px;
+    padding:8px 10px;
+  }
+  #raceTrack .lane {
+    position:relative;
+    height:16px;
+    background:rgba(255,255,255,0.08);
+    border-radius:8px;
+    margin-bottom:5px;
+  }
+  #raceTrack .lane:last-child { margin-bottom:0; }
+  #raceTrack .marker {
+    position:absolute; top:-3px;
+    width:22px; height:22px;
+    transform:translateX(-50%);
+    transition:left 0.15s linear;
+  }
+  #raceTrack .flagEnd {
+    position:absolute; right:2px; top:-6px;
+    font-size:16px;
+  }
+  #boostBar {
+    position:absolute; top:8px; right:12px;
+    width:90px; height:10px;
+    background:rgba(255,255,255,0.15);
+    border-radius:6px;
+    overflow:hidden;
+    border:1px solid rgba(255,255,255,0.3);
+  }
+  #boostFill {
+    height:100%;
+    width:50%;
+    background:#5CE1E6;
+  }
+
+  #controls {
+    position:absolute; bottom:0; left:0; right:0;
+    display:flex; justify-content:space-between;
+    padding:16px;
+    pointer-events:none;
+  }
+  #controls button {
+    pointer-events:auto;
+    width:70px; height:70px;
+    border-radius:50%;
+    border:none;
+    background:rgba(255,255,255,0.18);
+    color:#fff;
+    font-size:30px;
+    border:2px solid rgba(255,255,255,0.35);
+  }
+  #controls button:active { background:rgba(255,255,255,0.35); }
+
+  #overlay {
+    position:absolute; inset:0;
+    background:rgba(1,20,30,0.94);
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    color:#fff; text-align:center; padding:24px; gap:14px;
+  }
+  #overlay h1 { color:#5CE1E6; font-size:30px; }
+  #overlay p { color:#bfe9f2; font-size:14px; max-width:320px; line-height:1.5; }
+  #standings { font-size:15px; color:#bfe9f2; margin-top:4px; width:100%; max-width:280px; }
+  #standings .row { display:flex; justify-content:space-between; padding:4px 6px; border-radius:6px; }
+  #standings .me { background:rgba(92,225,230,0.18); color:#5CE1E6; font-weight:bold; }
+  #startBtn, #retryBtn {
+    margin-top:6px;
+    padding:12px 34px;
+    background:#5CE1E6;
+    color:#012a3e;
+    border:none;
+    border-radius:22px;
+    font-weight:bold;
+    font-size:16px;
+  }
+</style>
+</head>
+<body>
+<div id="stage">
+  <canvas id="game"></canvas>
+
+  <div id="hud" class="hidden">
+    <div id="raceTrack">
+      <div class="lane"><span class="marker" id="mk0">🦈</span><span class="flagEnd">🏁</span></div>
+      <div class="lane"><span class="marker" id="mk1">🦈</span><span class="flagEnd">🏁</span></div>
+      <div class="lane"><span class="marker" id="mk2">🦈</span><span class="flagEnd">🏁</span></div>
+      <div class="lane"><span class="marker" id="mk3">🦈</span><span class="flagEnd">🏁</span></div>
+    </div>
+    <div id="boostBar"><div id="boostFill"></div></div>
+  </div>
+
+  <div id="controls" class="hidden">
+    <button id="leftBtn">◀</button>
+    <button id="rightBtn">▶</button>
+  </div>
+
+  <div id="overlay">
+    <h1>🦈 SHARK RACE</h1>
+    <p>Swipe or tap the arrows to switch lanes. Dodge rocks and nets — they slow you down. Eat fish for a speed boost. First shark to the finish wins!</p>
+    <button id="startBtn">START RACE</button>
+  </div>
+</div>
+
+<script>
+(function(){
+  const canvas = document.getElementById('game');
+  const ctx = canvas.getContext('2d');
+  function resizeCanvas(){
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+  }
+  window.addEventListener('resize', resizeCanvas);
+  resizeCanvas();
+
+  const LANES = 3;
+  const TARGET = 2400;
+  const BASE_SPEED = 120;
+  const DECAY_RATE = 0.9;
+
+  function laneX(lane){
+    return (canvas.width / LANES) * (lane + 0.5);
+  }
+
+  // ---------- Racers ----------
+  let player, aiRacers, allRacers, standings, placeCounter;
+  let items = []; // barriers & fish
+  let spawnTimer = 0;
+  let running = false;
+  let elapsed = 0;
+
+  const AI_NAMES = ['Chomper', 'Torpedo', 'Ripcurl'];
+  const AI_COLORS = ['#FF8A5C', '#FFD166', '#9B7EDE'];
+
+  function makeRacer(name, color, isPlayer){
+    return {
+      name, color, isPlayer,
+      lane: 1,
+      x: laneX(1),
+      distance: 0,
+      speedMult: 1,
+      baseSpeed: BASE_SPEED * (isPlayer ? 1 : (0.92 + Math.random()*0.16)),
+      finished:false,
+      place:0,
+      eventTimer: 0.6 + Math.random()*0.8
+    };
+  }
+
+  function resetRace(){
+    player = makeRacer('You', '#5CE1E6', true);
+    player.y = 0; // set at draw time based on canvas height
+    aiRacers = AI_NAMES.map((n,i)=> makeRacer(n, AI_COLORS[i], false));
+    allRacers = [player, ...aiRacers];
+    standings = [];
+    placeCounter = 0;
+    items = [];
+    spawnTimer = 0.6;
+    elapsed = 0;
+  }
+
+  // ---------- Input ----------
+  function switchLane(dir){
+    player.lane = Math.max(0, Math.min(LANES-1, player.lane + dir));
+  }
+  document.getElementById('leftBtn').addEventListener('touchstart', e=>{ e.preventDefault(); switchLane(-1); }, {passive:false});
+  document.getElementById('rightBtn').addEventListener('touchstart', e=>{ e.preventDefault(); switchLane(1); }, {passive:false});
+  document.getElementById('leftBtn').addEventListener('click', ()=> switchLane(-1));
+  document.getElementById('rightBtn').addEventListener('click', ()=> switchLane(1));
+
+  window.addEventListener('keydown', e=>{
+    if (e.key==='ArrowLeft'||e.key==='a'||e.key==='A') switchLane(-1);
+    if (e.key==='ArrowRight'||e.key==='d'||e.key==='D') switchLane(1);
+  });
+
+  let touchStartX = null;
+  canvas.addEventListener('touchstart', e=>{ touchStartX = e.touches[0].clientX; }, {passive:true});
+  canvas.addEventListener('touchend', e=>{
+    if (touchStartX===null) return;
+    const dx = e.changedTouches[0].clientX - touchStartX;
+    if (Math.abs(dx) > 30) switchLane(dx>0?1:-1);
+    touchStartX = null;
+  }, {passive:true});
+
+  // ---------- Items (barriers & fish) ----------
+  function spawnItem(){
+    const lane = Math.floor(Math.random()*LANES);
+    const type = Math.random() < 0.45 ? 'barrier' : 'fish';
+    items.push({ type, lane, progress: -0.08, hit:false });
+  }
+
+  function updateItems(dt, scrollSpeedNorm){
+    for (const it of items){
+      it.progress += scrollSpeedNorm * dt;
+    }
+    // collision check against player at progress ~ 0.82 (near player's y position)
+    const hitZoneMin = 0.78, hitZoneMax = 0.90;
+    for (const it of items){
+      if (it.hit) continue;
+      if (it.lane === player.lane && it.progress > hitZoneMin && it.progress < hitZoneMax){
+        it.hit = true;
+        if (it.type === 'barrier'){
+          player.speedMult = Math.min(player.speedMult, 0.4);
+        } else {
+          player.speedMult = Math.min(player.speedMult + 0.6, 2.2);
+        }
+      }
+    }
+    items = items.filter(it => it.progress < 1.05);
+  }
+
+  // ---------- AI ----------
+  function updateAI(ai, dt){
+    ai.eventTimer -= dt;
+    if (ai.eventTimer <= 0){
+      const r = Math.random();
+      if (r < 0.32) ai.speedMult = 1.3 + Math.random()*0.5;
+      else if (r < 0.55) ai.speedMult = 0.5 + Math.random()*0.25;
+      ai.eventTimer = 0.7 + Math.random()*1.1;
+    }
+  }
+
+  function decaySpeed(racer, dt){
+    racer.speedMult += (1 - racer.speedMult) * DECAY_RATE * dt;
+  }
+
+  function checkFinish(racer){
+    if (!racer.finished && racer.distance >= TARGET){
+      racer.finished = true;
+      placeCounter++;
+      racer.place = placeCounter;
+      standings.push(racer);
+    }
+  }
+
+  function resolveRemaining(){
+    let iterations = 0;
+    const dt = 0.05;
+    while (standings.length < allRacers.length && iterations < 40000){
+      for (const r of allRacers){
+        if (r.finished) continue;
+        decaySpeed(r, dt);
+        if (!r.isPlayer) updateAI(r, dt);
+        r.distance += r.baseSpeed * r.speedMult * dt;
+        checkFinish(r);
+      }
+      iterations++;
+    }
+    // safety: if anything still unfinished after cap, place by distance
+    if (standings.length < allRacers.length){
+      const rest = allRacers.filter(r=>!r.finished).sort((a,b)=> b.distance - a.distance);
+      for (const r of rest){
+        r.finished = true;
+        placeCounter++;
+        r.place = placeCounter;
+        standings.push(r);
+      }
+    }
+  }
+
+  // ---------- Update / Draw ----------
+  const markerEls = ['mk0','mk1','mk2','mk3'].map(id=>document.getElementById(id));
+
+  function refreshHUD(){
+    const order = [player, ...aiRacers];
+    order.forEach((r, i)=>{
+      const pct = Math.max(0, Math.min(1, r.distance/TARGET));
+      const el = markerEls[i];
+      el.style.left = (pct*100) + '%';
+      el.textContent = r.isPlayer ? '🦈' : '🐬';
+    });
+    const fillPct = Math.max(0, Math.min(1, (player.speedMult) / 2.2)) * 100;
+    document.getElementById('boostFill').style.width = fillPct + '%';
+    document.getElementById('boostFill').style.background = player.speedMult > 1.05 ? '#5CE1E6' : (player.speedMult < 0.95 ? '#FF6B6B' : '#8fd3d6');
+  }
+
+  function update(dt){
+    if (!running) return;
+    elapsed += dt;
+
+    decaySpeed(player, dt);
+    player.distance += player.baseSpeed * player.speedMult * dt;
+    player.x += (laneX(player.lane) - player.x) * Math.min(1, dt*8);
+
+    aiRacers.forEach(ai=>{
+      decaySpeed(ai, dt);
+      updateAI(ai, dt);
+      ai.distance += ai.baseSpeed * ai.speedMult * dt;
+    });
+
+    const scrollNorm = 0.16 * player.speedMult;
+    spawnTimer -= dt;
+    if (spawnTimer <= 0){
+      spawnItem();
+      spawnTimer = 0.55 + Math.random()*0.6;
+    }
+    updateItems(dt, scrollNorm);
+
+    aiRacers.forEach(checkFinish);
+    checkFinish(player);
+
+    if (player.finished){
+      running = false;
+      resolveRemaining();
+      showEndOverlay();
+      return;
+    }
+
+    if (elapsed > 90 && standings.length < allRacers.length){
+      running = false;
+      resolveRemaining();
+      showEndOverlay();
+      return;
+    }
+
+    refreshHUD();
+  }
+
+  function draw(){
+    const w = canvas.width, h = canvas.height;
+    ctx.fillStyle = '#014a63';
+    ctx.fillRect(0,0,w,h);
+
+    // lane dividers
+    ctx.strokeStyle = 'rgba(255,255,255,0.18)';
+    ctx.lineWidth = 3;
+    ctx.setLineDash([14,16]);
+    for (let l=1; l<LANES; l++){
+      const x = (w/LANES)*l;
+      ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,h); ctx.stroke();
+    }
+    ctx.setLineDash([]);
+
+    // water shimmer lines
+    ctx.strokeStyle = 'rgba(255,255,255,0.06)';
+    ctx.lineWidth = 2;
+    const t = performance.now()/700;
+    for (let i=0;i<6;i++){
+      const y = ((i*140 + (t*40)) % (h+140)) - 70;
+      ctx.beginPath();
+      ctx.moveTo(0,y);
+      for (let x=0;x<=w;x+=40){
+        ctx.lineTo(x, y + Math.sin(x*0.05+t)*6);
+      }
+      ctx.stroke();
+    }
+
+    // items
+    for (const it of items){
+      const y = it.progress * h;
+      const x = laneX(it.lane);
+      if (it.type === 'barrier'){
+        drawBarrier(x,y);
+      } else {
+        drawFish(x,y,t);
+      }
+    }
+
+    // player shark
+    const playerY = h*0.84;
+    drawShark(player.x, playerY, player.color, player.speedMult, true);
+  }
+
+  function drawBarrier(x,y){
+    ctx.save();
+    ctx.translate(x,y);
+    ctx.fillStyle = '#8d8f94';
+    ctx.beginPath();
+    ctx.moveTo(-26,16);
+    ctx.lineTo(-16,-14);
+    ctx.lineTo(6,-20);
+    ctx.lineTo(24,-4);
+    ctx.lineTo(20,16);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = '#6c6e73';
+    ctx.beginPath();
+    ctx.ellipse(0,14,22,7,0,0,Math.PI*2);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  function drawFish(x,y,t){
+    ctx.save();
+    ctx.translate(x,y);
+    const bob = Math.sin(t*3 + x)*3;
+    ctx.translate(0,bob);
+    ctx.fillStyle = '#FF9F45';
+    ctx.beginPath();
+    ctx.ellipse(0,0,16,9,0,0,Math.PI*2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(-16,0);
+    ctx.lineTo(-26,-8);
+    ctx.lineTo(-26,8);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = '#1a1206';
+    ctx.beginPath();
+    ctx.arc(8,-2,2,0,Math.PI*2);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  function drawShark(x,y,color,speedMult,isPlayer){
+    ctx.save();
+    ctx.translate(x,y);
+    const wag = Math.sin(performance.now()/120)*0.15;
+    // tail
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.moveTo(-6,20);
+    ctx.lineTo(6,20);
+    ctx.lineTo(0 + wag*20, 38);
+    ctx.closePath();
+    ctx.fill();
+    // body
+    ctx.beginPath();
+    ctx.ellipse(0,0,20,32,0,0,Math.PI*2);
+    ctx.fill();
+    // dorsal fin
+    ctx.beginPath();
+    ctx.moveTo(-4,-8);
+    ctx.lineTo(0,-30);
+    ctx.lineTo(10,-6);
+    ctx.closePath();
+    ctx.fill();
+    // belly
+    ctx.fillStyle = 'rgba(255,255,255,0.35)';
+    ctx.beginPath();
+    ctx.ellipse(0,8,13,18,0,0,Math.PI*2);
+    ctx.fill();
+    // eye
+    ctx.fillStyle = '#08202a';
+    ctx.beginPath();
+    ctx.arc(-8,-16,2.6,0,Math.PI*2);
+    ctx.arc(8,-16,2.6,0,Math.PI*2);
+    ctx.fill();
+    // speed glow
+    if (speedMult > 1.2){
+      ctx.strokeStyle = 'rgba(92,225,230,0.6)';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.ellipse(0,0,26,38,0,0,Math.PI*2);
+      ctx.stroke();
+    } else if (speedMult < 0.7){
+      ctx.strokeStyle = 'rgba(255,107,107,0.6)';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.ellipse(0,0,26,38,0,0,Math.PI*2);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  // ---------- Flow ----------
+  function ordinal(n){
+    if (n===1) return '1st';
+    if (n===2) return '2nd';
+    if (n===3) return '3rd';
+    return n+'th';
+  }
+
+  function showEndOverlay(){
+    const overlay = document.getElementById('overlay');
+    overlay.innerHTML = '';
+    const h1 = document.createElement('h1');
+    h1.textContent = player.place===1 ? 'You Win! 🏆' : 'Race Over!';
+    const p = document.createElement('p');
+    p.textContent = 'You finished ' + ordinal(player.place) + '!';
+    const board = document.createElement('div');
+    board.id = 'standings';
+    standings.slice().sort((a,b)=>a.place-b.place).forEach(r=>{
+      const row = document.createElement('div');
+      row.className = 'row' + (r.isPlayer ? ' me' : '');
+      row.textContent = ordinal(r.place) + ' — ' + r.name;
+      board.appendChild(row);
+    });
+    const retryBtn = document.createElement('button');
+    retryBtn.id = 'retryBtn';
+    retryBtn.textContent = 'RACE AGAIN';
+    retryBtn.addEventListener('click', startGame);
+    overlay.appendChild(h1);
+    overlay.appendChild(p);
+    overlay.appendChild(board);
+    overlay.appendChild(retryBtn);
+    overlay.style.display = 'flex';
+    document.getElementById('hud').classList.add('hidden');
+    document.getElementById('controls').classList.add('hidden');
+  }
+
+  function startGame(){
+    resetRace();
+    document.getElementById('overlay').style.display = 'none';
+    document.getElementById('hud').classList.remove('hidden');
+    document.getElementById('controls').classList.remove('hidden');
+    running = true;
+  }
+
+  document.getElementById('startBtn').addEventListener('click', startGame);
+
+  // ---------- Loop ----------
+  let lastTime = 0;
+  function loop(ts){
+    const dt = Math.min((ts-lastTime)/1000, 0.05) || 0;
+    lastTime = ts;
+    update(dt);
+    draw();
+    requestAnimationFrame(loop);
+  }
+
+  resetRace();
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
