@@ -1,0 +1,891 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>Dinosaur Smash</title>
+<style>
+  :root{
+    --sky-top: #ffb454;
+    --sky-bot: #ff7a5c;
+    --jungle: #2f6b3a;
+    --jungle-dark: #204a27;
+    --cream: #fff6e0;
+    --ink: #201305;
+    --accent: #ffce45;
+    --danger: #e63946;
+  }
+  *{ box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html,body{
+    margin:0; padding:0; width:100%; min-height:100%;
+    background: var(--jungle-dark);
+    font-family: 'Trebuchet MS', 'Segoe UI', sans-serif;
+    color: var(--cream);
+    overflow-y: auto;
+    overflow-x: hidden;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: none;
+  }
+  body.playing{
+    overflow: hidden;
+    position: fixed;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+  }
+  #app{
+    display:flex; flex-direction:column; align-items:center;
+    min-height:100%; padding: 16px;
+  }
+  h1.title{
+    font-family: 'Georgia', serif;
+    font-size: clamp(30px, 7vw, 52px);
+    letter-spacing: 1px;
+    margin: 6px 0 2px 0;
+    color: var(--accent);
+    text-shadow: 0 3px 0 var(--ink), 0 0 18px rgba(255,206,69,0.4);
+  }
+  .subtitle{
+    opacity:0.8;
+    font-size: 13px;
+    margin-bottom: 16px;
+    letter-spacing:1px;
+    text-transform: uppercase;
+    text-align: center;
+  }
+  .panel{
+    background: rgba(0,0,0,0.28);
+    border: 2px solid #7a4a1e;
+    border-radius: 18px;
+    padding: 18px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.4);
+    max-width: 900px;
+    width: 100%;
+  }
+  #skinGrid{
+    display:grid;
+    grid-template-columns: repeat(auto-fill, minmax(84px, 1fr));
+    gap: 10px;
+    margin: 14px 0;
+  }
+  .skinCard{
+    background: rgba(255,255,255,0.05);
+    border: 2px solid transparent;
+    border-radius: 12px;
+    padding: 8px 4px;
+    display:flex; flex-direction:column; align-items:center;
+    cursor:pointer;
+    transition: transform 0.12s ease, border-color 0.12s ease, background 0.12s ease;
+  }
+  .skinCard:hover{ transform: translateY(-3px); background: rgba(255,255,255,0.1); }
+  .skinCard.selected{
+    border-color: var(--accent);
+    background: rgba(255,206,69,0.15);
+    box-shadow: 0 0 14px rgba(255,206,69,0.5);
+  }
+  .skinCard canvas{ pointer-events:none; }
+  .skinCard span{
+    font-size: 11px;
+    margin-top: 4px;
+    text-align:center;
+    color: var(--cream);
+    opacity:0.9;
+  }
+  .startBtn, .again-btn{
+    display:block;
+    margin: 18px auto 4px auto;
+    padding: 14px 36px;
+    font-size: 19px;
+    font-weight:bold;
+    letter-spacing: 1px;
+    color: var(--ink);
+    background: linear-gradient(180deg, var(--accent), #d99b1f);
+    border: none;
+    border-radius: 999px;
+    cursor: pointer;
+    box-shadow: 0 6px 0 #8a600f, 0 10px 18px rgba(0,0,0,0.4);
+    transition: transform 0.08s ease;
+  }
+  .startBtn:disabled{ opacity: 0.4; cursor: not-allowed; box-shadow: none; }
+  .startBtn:active:not(:disabled), .again-btn:active{
+    transform: translateY(4px);
+    box-shadow: 0 2px 0 #8a600f, 0 4px 8px rgba(0,0,0,0.4);
+  }
+
+  /* ---------- game screen (full-screen) ---------- */
+  #gameWrap{
+    display:none;
+    position: fixed;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+  }
+  #game{
+    position:absolute; inset:0;
+    width:100%; height:100%;
+    display:block;
+    touch-action: none;
+  }
+  #hud{
+    position:absolute; top:0; left:0; right:0;
+    display:flex; justify-content:space-between; align-items:flex-start;
+    padding: max(10px, env(safe-area-inset-top)) 12px 0 12px;
+    pointer-events:none;
+    font-size: 14px;
+    z-index: 5;
+  }
+  #hud > *{ pointer-events:auto; }
+  #timer{
+    font-size: 22px;
+    font-weight:bold;
+    color: var(--accent);
+    background: rgba(0,0,0,0.4);
+    padding: 5px 16px;
+    border-radius: 10px;
+    border: 1px solid #8a600f;
+  }
+  #hearts{ margin-bottom:4px; }
+  #hearts span{ font-size:20px; margin-right:2px; filter: drop-shadow(0 0 3px rgba(0,0,0,0.6)); }
+  #scoreboard{ display:flex; flex-direction:column; gap: 4px; align-items:flex-start; }
+  .scoreChip{
+    background: rgba(0,0,0,0.4);
+    border-radius: 8px;
+    padding: 3px 9px;
+    font-size: 12px;
+    border: 1px solid rgba(255,255,255,0.15);
+    white-space: nowrap;
+  }
+  #fsBtn{
+    background: rgba(0,0,0,0.4);
+    border: 1px solid #8a600f;
+    color: var(--cream);
+    border-radius: 8px;
+    font-size: 16px;
+    padding: 5px 10px;
+    cursor:pointer;
+  }
+
+  /* virtual joystick */
+  #joyBase{
+    position:absolute; left: 26px; bottom: max(26px, env(safe-area-inset-bottom));
+    width: 120px; height:120px; border-radius:50%;
+    background: rgba(255,255,255,0.12);
+    border: 2px solid rgba(255,255,255,0.35);
+    touch-action:none;
+    display:none;
+    z-index: 6;
+  }
+  #joyStick{
+    position:absolute; left:50%; top:50%;
+    width: 54px; height:54px; border-radius:50%;
+    background: rgba(255,206,69,0.85);
+    border: 2px solid #8a600f;
+    transform: translate(-50%,-50%);
+    pointer-events:none;
+  }
+  @media (pointer:coarse){
+    #joyBase{ display:block; }
+  }
+
+  /* ---------- overlay ---------- */
+  #overlay{
+    display:none;
+    position: fixed; inset:0;
+    background: rgba(0,0,0,0.8);
+    align-items:center; justify-content:center;
+    flex-direction:column;
+    z-index: 30;
+    text-align:center;
+    padding: 20px;
+  }
+  #overlay h2{
+    color: var(--accent);
+    font-size: clamp(28px, 6vw, 42px);
+    margin-bottom: 8px;
+    font-family: 'Georgia', serif;
+  }
+  #overlay p{ margin: 4px 0; font-size:16px; max-width: 480px; }
+</style>
+</head>
+<body>
+<div id="app">
+
+  <div id="setupScreen">
+    <h1 class="title">🦖 Dinosaur Smash</h1>
+    <div class="subtitle">Pick your dino &middot; eat prey &amp; meat &middot; grow the biggest!</div>
+    <div class="panel">
+      <div id="skinGrid"></div>
+      <button class="startBtn" id="startBtn" disabled>Choose a dino to start</button>
+    </div>
+  </div>
+
+  <div id="gameWrap">
+    <canvas id="game"></canvas>
+    <div id="hud">
+      <div>
+        <div id="hearts"></div>
+        <div id="scoreboard"></div>
+      </div>
+      <button id="fsBtn" title="Full screen">⛶</button>
+      <div id="timer">2:30</div>
+    </div>
+    <div id="joyBase"><div id="joyStick"></div></div>
+  </div>
+
+</div>
+
+<div id="overlay">
+  <h2 id="overlayTitle">Game Over</h2>
+  <p id="overlaySub"></p>
+  <button class="again-btn" id="againBtn">Play Again</button>
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  /* ===================== DINO SPECIES (10 selectable skins) ===================== */
+  const SPECIES = [
+    {name:"Rex Red",       color:"#e63946", accent:"#7a1520", feature:"teeth"},
+    {name:"Tri Blue",      color:"#3a86ff", accent:"#0b3d8a", feature:"horns"},
+    {name:"Stego Green",   color:"#5fa85a", accent:"#2b5c28", feature:"plates"},
+    {name:"Raptor Purple", color:"#9d4edd", accent:"#4a1a6e", feature:"claw"},
+    {name:"Bronto Yellow", color:"#ffd60a", accent:"#8a6a00", feature:"none"},
+    {name:"Spino Teal",    color:"#2ec4b6", accent:"#0a5c53", feature:"sail"},
+    {name:"Anky Brown",    color:"#a5682a", accent:"#5c360f", feature:"spikes"},
+    {name:"Ptero Sky",     color:"#7fd8ff", accent:"#1c6e8c", feature:"wings"},
+    {name:"Para Pink",     color:"#ff8fab", accent:"#8a1f47", feature:"crest"},
+    {name:"Pachy Orange",  color:"#ff9f45", accent:"#8a4b0f", feature:"dome"}
+  ];
+  const RIVAL_NAMES = ["Chomper","Big Sal","Rowdy Rex","Fern"];
+
+  /* ===================== DOM refs ===================== */
+  const setupScreen = document.getElementById('setupScreen');
+  const gameWrap = document.getElementById('gameWrap');
+  const skinGrid = document.getElementById('skinGrid');
+  const startBtn = document.getElementById('startBtn');
+  const canvas = document.getElementById('game');
+  const ctx = canvas.getContext('2d');
+  const heartsEl = document.getElementById('hearts');
+  const scoreboardEl = document.getElementById('scoreboard');
+  const timerEl = document.getElementById('timer');
+  const overlay = document.getElementById('overlay');
+  const overlayTitle = document.getElementById('overlayTitle');
+  const overlaySub = document.getElementById('overlaySub');
+  const againBtn = document.getElementById('againBtn');
+  const fsBtn = document.getElementById('fsBtn');
+  const joyBase = document.getElementById('joyBase');
+  const joyStick = document.getElementById('joyStick');
+
+  let W = 0, H = 0;
+  function resizeCanvas(){
+    W = window.innerWidth;
+    H = window.innerHeight;
+    canvas.width = W;
+    canvas.height = H;
+  }
+  resizeCanvas();
+  window.addEventListener('resize', resizeCanvas);
+  window.addEventListener('orientationchange', ()=> setTimeout(resizeCanvas, 200));
+
+  /* ===================== drawing: generic dino ===================== */
+  function drawDino(c, x, y, size, sp, facing, legPhase, flash, sleepy){
+    c.save();
+    c.translate(x, y);
+    c.scale(facing, 1);
+
+    const body = flash ? "#ffffff" : sp.color;
+    const accent = flash ? "#dddddd" : sp.accent;
+
+    // tail
+    c.fillStyle = body;
+    c.beginPath();
+    c.moveTo(-size*0.7, size*0.05);
+    c.quadraticCurveTo(-size*1.4, -size*0.1, -size*1.6, size*0.25);
+    c.quadraticCurveTo(-size*1.2, size*0.15, -size*0.65, size*0.3);
+    c.closePath();
+    c.fill();
+
+    // back legs (simple walking animation)
+    const legSwing = Math.sin(legPhase) * size*0.18;
+    c.fillStyle = accent;
+    c.beginPath();
+    c.ellipse(-size*0.25, size*0.55 + legSwing*0.2, size*0.22, size*0.32, 0, 0, Math.PI*2);
+    c.fill();
+    c.beginPath();
+    c.ellipse(size*0.15, size*0.55 - legSwing*0.2, size*0.22, size*0.32, 0, 0, Math.PI*2);
+    c.fill();
+
+    // body
+    c.fillStyle = body;
+    c.beginPath();
+    c.ellipse(0, 0, size*0.85, size*0.62, 0, 0, Math.PI*2);
+    c.fill();
+
+    // belly
+    c.fillStyle = "rgba(255,255,255,0.25)";
+    c.beginPath();
+    c.ellipse(0, size*0.2, size*0.55, size*0.32, 0, 0, Math.PI*2);
+    c.fill();
+
+    // head
+    c.fillStyle = body;
+    c.beginPath();
+    c.ellipse(size*0.85, -size*0.15, size*0.45, size*0.38, 0, 0, Math.PI*2);
+    c.fill();
+    // snout
+    c.beginPath();
+    c.ellipse(size*1.2, -size*0.05, size*0.24, size*0.2, 0, 0, Math.PI*2);
+    c.fill();
+
+    /* ---- feature decorations ---- */
+    if(!flash){
+      switch(sp.feature){
+        case "teeth":
+          c.fillStyle = "#fff";
+          c.beginPath();
+          c.moveTo(size*1.05, size*0.05); c.lineTo(size*1.15, size*0.15); c.lineTo(size*1.25, size*0.03);
+          c.fill();
+          break;
+        case "horns":
+          c.fillStyle = accent;
+          [[-0.05,-0.5],[0.15,-0.55],[0.35,-0.5]].forEach(([dx,dy])=>{
+            c.beginPath();
+            c.moveTo(size*(0.85+dx), size*(-0.15+dy));
+            c.lineTo(size*(0.78+dx), size*(-0.5+dy));
+            c.lineTo(size*(0.95+dx), size*(-0.15+dy));
+            c.closePath(); c.fill();
+          });
+          break;
+        case "plates":
+          c.fillStyle = accent;
+          for(let i=0;i<4;i++){
+            const px = -size*0.55 + i*size*0.38;
+            c.beginPath();
+            c.moveTo(px, -size*0.4);
+            c.lineTo(px+size*0.18, -size*0.78);
+            c.lineTo(px+size*0.36, -size*0.4);
+            c.closePath(); c.fill();
+          }
+          break;
+        case "claw":
+          c.strokeStyle = accent; c.lineWidth = size*0.05; c.lineCap="round";
+          c.beginPath(); c.moveTo(size*0.55, size*0.35); c.lineTo(size*0.75, size*0.55); c.stroke();
+          break;
+        case "sail":
+          c.fillStyle = accent;
+          c.beginPath();
+          c.moveTo(-size*0.45, -size*0.35);
+          c.quadraticCurveTo(0, -size*1.25, size*0.55, -size*0.4);
+          c.quadraticCurveTo(0.1*size, -size*0.55, -size*0.45, -size*0.35);
+          c.closePath(); c.fill();
+          break;
+        case "spikes":
+          c.fillStyle = accent;
+          for(let i=0;i<5;i++){
+            const px = -size*0.6 + i*size*0.32;
+            c.beginPath();
+            c.moveTo(px, -size*0.35);
+            c.lineTo(px+size*0.12, -size*0.62);
+            c.lineTo(px+size*0.24, -size*0.35);
+            c.closePath(); c.fill();
+          }
+          break;
+        case "wings":
+          c.fillStyle = accent;
+          c.beginPath();
+          c.moveTo(-size*0.1, -size*0.3);
+          c.quadraticCurveTo(-size*0.7, -size*0.9, -size*1.1, -size*0.25);
+          c.quadraticCurveTo(-size*0.5, -size*0.3, -size*0.15, -size*0.05);
+          c.closePath(); c.fill();
+          break;
+        case "crest":
+          c.fillStyle = accent;
+          c.beginPath();
+          c.ellipse(size*1.05, -size*0.55, size*0.14, size*0.32, 0.4, 0, Math.PI*2);
+          c.fill();
+          break;
+        case "dome":
+          c.fillStyle = accent;
+          c.beginPath();
+          c.arc(size*0.85, -size*0.35, size*0.22, Math.PI, 0);
+          c.fill();
+          break;
+        default: break;
+      }
+    }
+
+    // eye
+    c.fillStyle = "#1a1a1a";
+    c.beginPath(); c.arc(size*0.95, -size*0.2, size*0.07, 0, Math.PI*2); c.fill();
+    if(!flash){
+      c.fillStyle = "#fff";
+      c.beginPath(); c.arc(size*0.97, -size*0.22, size*0.025, 0, Math.PI*2); c.fill();
+    }
+
+    // happy smile
+    if(!sleepy){
+      c.strokeStyle = "#1a1a1a";
+      c.lineWidth = size*0.035;
+      c.lineCap = "round";
+      c.beginPath();
+      c.arc(size*1.05, -size*0.02, size*0.13, 0.15, 1.1);
+      c.stroke();
+    }
+
+    c.restore();
+  }
+
+  /* ===================== skin select UI ===================== */
+  let chosenSkin = null;
+  SPECIES.forEach((sp, i)=>{
+    const card = document.createElement('div');
+    card.className = 'skinCard';
+    const cnv = document.createElement('canvas');
+    cnv.width = 68; cnv.height = 68;
+    const cctx = cnv.getContext('2d');
+    drawDino(cctx, 22, 44, 16, sp, 1, 0, false, false);
+    const label = document.createElement('span');
+    label.textContent = sp.name;
+    card.appendChild(cnv);
+    card.appendChild(label);
+    card.addEventListener('click', ()=>{
+      document.querySelectorAll('.skinCard').forEach(el=>el.classList.remove('selected'));
+      card.classList.add('selected');
+      chosenSkin = i;
+      startBtn.disabled = false;
+      startBtn.textContent = "Start Dinosaur Smash!";
+    });
+    skinGrid.appendChild(card);
+  });
+
+  /* ===================== game constants ===================== */
+  const GAME_LENGTH = 150; // 2.5 minutes
+  const MAX_PREY = 9;
+  const MAX_MEAT = 6;
+  const BASE_SIZE_RATIO = 0.045;   // relative to min(W,H)
+  const MAX_SIZE_RATIO = 0.16;
+  const GROWTH_PREY = 0.9;
+  const GROWTH_MEAT = 1.3;
+  const HIT_INVULN_TIME = 1.6;
+  const BIGGER_THRESHOLD = 1.18; // how much bigger a rival must be to threaten player
+  const START_HEARTS = 3;
+
+  let baseSize, maxSize;
+  function recalcSizeBounds(){
+    const dim = Math.min(W,H);
+    baseSize = dim * BASE_SIZE_RATIO;
+    maxSize = dim * MAX_SIZE_RATIO;
+  }
+
+  let entities = [];
+  let prey = [];
+  let meat = [];
+  let timeLeft = GAME_LENGTH;
+  let running = false;
+  let lastTs = 0;
+  let keys = {};
+  let joyVec = {x:0, y:0, active:false};
+
+  function rand(a,b){ return a + Math.random()*(b-a); }
+
+  function makeEntity(isPlayer, skinIdx, name){
+    return {
+      isPlayer, name, skinIdx,
+      x: rand(W*0.15, W*0.85), y: rand(H*0.2, H*0.8),
+      vx:0, vy:0,
+      size: baseSize,
+      eatCount:0,
+      hearts: START_HEARTS,
+      invuln: 2.0, // brief grace period at game start
+      legPhase: Math.random()*10,
+      facing: 1,
+      alive: true,
+      wanderAngle: Math.random()*Math.PI*2,
+      wanderTimer: 0
+    };
+  }
+
+  function resetGame(skinIdx){
+    recalcSizeBounds();
+    entities = [];
+    entities.push(makeEntity(true, skinIdx, "You"));
+    const pool = SPECIES.map((_,i)=>i).filter(i=>i!==skinIdx);
+    for(let i=0;i<3;i++){
+      const idx = pool.splice(Math.floor(Math.random()*pool.length),1)[0];
+      entities.push(makeEntity(false, idx, RIVAL_NAMES[i]));
+    }
+    prey = [];
+    for(let i=0;i<MAX_PREY;i++) spawnPrey();
+    meat = [];
+    for(let i=0;i<MAX_MEAT;i++) spawnMeat();
+
+    timeLeft = GAME_LENGTH;
+    running = true;
+  }
+
+  function spawnPrey(){
+    prey.push({
+      x: rand(W*0.06, W*0.94), y: rand(H*0.1, H*0.92),
+      wobble: Math.random()*10,
+      angle: Math.random()*Math.PI*2,
+      hue: rand(90,140)
+    });
+  }
+  function spawnMeat(){
+    meat.push({ x: rand(W*0.06, W*0.94), y: rand(H*0.1, H*0.92), wobble: Math.random()*10 });
+  }
+
+  /* ===================== input: keyboard ===================== */
+  window.addEventListener('keydown', e=>{ keys[e.key.toLowerCase()] = true; });
+  window.addEventListener('keyup', e=>{ keys[e.key.toLowerCase()] = false; });
+
+  /* ===================== input: virtual joystick ===================== */
+  let joyTouchId = null;
+  const joyRadius = 60;
+  function joyCenter(){
+    const r = joyBase.getBoundingClientRect();
+    return {x: r.left + r.width/2, y: r.top + r.height/2};
+  }
+  function handleJoyStart(clientX, clientY, id){
+    joyTouchId = id;
+    updateJoy(clientX, clientY);
+  }
+  function updateJoy(clientX, clientY){
+    const c = joyCenter();
+    let dx = clientX - c.x, dy = clientY - c.y;
+    const dist = Math.hypot(dx,dy);
+    const clamped = Math.min(dist, joyRadius);
+    const angle = Math.atan2(dy,dx);
+    const sx = Math.cos(angle)*clamped, sy = Math.sin(angle)*clamped;
+    joyStick.style.transform = `translate(${sx-27}px, ${sy-27}px)`;
+    if(dist < 12){ joyVec.active = false; joyVec.x=0; joyVec.y=0; }
+    else { joyVec.active = true; joyVec.x = dx/Math.max(dist,1); joyVec.y = dy/Math.max(dist,1); }
+  }
+  function resetJoy(){
+    joyTouchId = null;
+    joyVec.active = false; joyVec.x = 0; joyVec.y = 0;
+    joyStick.style.transform = `translate(-50%,-50%)`;
+  }
+  joyBase.addEventListener('touchstart', e=>{
+    e.preventDefault();
+    const t = e.changedTouches[0];
+    handleJoyStart(t.clientX, t.clientY, t.identifier);
+  }, {passive:false});
+  joyBase.addEventListener('touchmove', e=>{
+    e.preventDefault();
+    for(const t of e.changedTouches){
+      if(t.identifier === joyTouchId) updateJoy(t.clientX, t.clientY);
+    }
+  }, {passive:false});
+  joyBase.addEventListener('touchend', e=>{
+    e.preventDefault();
+    for(const t of e.changedTouches){
+      if(t.identifier === joyTouchId) resetJoy();
+    }
+  }, {passive:false});
+  joyBase.addEventListener('touchcancel', ()=> resetJoy());
+  // mouse fallback for laptops using trackpad clicking joystick
+  let joyMouseDown = false;
+  joyBase.addEventListener('mousedown', e=>{ joyMouseDown = true; updateJoy(e.clientX, e.clientY); });
+  window.addEventListener('mousemove', e=>{ if(joyMouseDown) updateJoy(e.clientX, e.clientY); });
+  window.addEventListener('mouseup', ()=>{ if(joyMouseDown){ joyMouseDown=false; resetJoy(); } });
+
+  fsBtn.addEventListener('click', ()=>{
+    const el = document.documentElement;
+    if(!document.fullscreenElement){
+      if(el.requestFullscreen) el.requestFullscreen().catch(()=>{});
+    } else {
+      if(document.exitFullscreen) document.exitFullscreen().catch(()=>{});
+    }
+  });
+
+  /* ===================== drawing background ===================== */
+  function drawBackground(t){
+    const grd = ctx.createLinearGradient(0,0,0,H);
+    grd.addColorStop(0, "#ffb454");
+    grd.addColorStop(0.55, "#ff8f5c");
+    grd.addColorStop(1, "#5fa85a");
+    ctx.fillStyle = grd;
+    ctx.fillRect(0,0,W,H);
+
+    // sun
+    ctx.save();
+    ctx.fillStyle = "rgba(255,240,200,0.9)";
+    ctx.beginPath();
+    ctx.arc(W*0.82, H*0.16, Math.min(W,H)*0.07, 0, Math.PI*2);
+    ctx.fill();
+    ctx.restore();
+
+    // distant hills
+    ctx.fillStyle = "rgba(40,90,50,0.5)";
+    ctx.beginPath();
+    ctx.moveTo(0, H*0.62);
+    for(let x=0;x<=W;x+=W/8){
+      ctx.quadraticCurveTo(x+W/16, H*0.58, x+W/8, H*0.62);
+    }
+    ctx.lineTo(W,H); ctx.lineTo(0,H); ctx.closePath();
+    ctx.fill();
+
+    // ferns / foliage dots pattern on ground
+    ctx.save();
+    ctx.globalAlpha = 0.25;
+    const spacing = Math.max(70, Math.min(W,H)/9);
+    for(let y = H*0.55; y < H; y += spacing*0.6){
+      for(let x = ((y/spacing)%2===0?0:spacing/2); x < W; x += spacing){
+        drawFern(x, y, spacing*0.35);
+      }
+    }
+    ctx.restore();
+  }
+  function drawFern(x,y,s){
+    ctx.strokeStyle = "#1f4d28";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(x, y+s*0.5);
+    ctx.lineTo(x, y-s*0.5);
+    for(let i=-2;i<=2;i++){
+      ctx.moveTo(x, y - i*s*0.18);
+      ctx.lineTo(x + (i%2===0?1:-1)*s*0.4, y - i*s*0.18 - s*0.15);
+    }
+    ctx.stroke();
+  }
+
+  function drawMeat(m,t){
+    const bob = Math.sin(t*0.003 + m.wobble)*3;
+    ctx.save();
+    ctx.translate(m.x, m.y+bob);
+    ctx.fillStyle = "#c96a4a";
+    ctx.beginPath();
+    ctx.ellipse(0,0,13,9,0.3,0,Math.PI*2);
+    ctx.fill();
+    ctx.fillStyle = "#f0e0c0";
+    ctx.lineWidth = 4;
+    ctx.strokeStyle = "#f0e0c0";
+    ctx.beginPath();
+    ctx.moveTo(-14,6); ctx.lineTo(-20,14);
+    ctx.moveTo(-9,10); ctx.lineTo(-13,18);
+    ctx.stroke();
+    ctx.fillStyle = "rgba(255,255,255,0.3)";
+    ctx.beginPath();
+    ctx.ellipse(-3,-3,5,3,0.3,0,Math.PI*2);
+    ctx.fill();
+    ctx.restore();
+  }
+  function drawPrey(p,t){
+    const bob = Math.sin(t*0.002 + p.wobble)*2;
+    ctx.save();
+    ctx.translate(p.x, p.y+bob);
+    const sp = { color: `hsl(${p.hue},55%,55%)`, accent: `hsl(${p.hue},55%,35%)`, feature:"none" };
+    drawDino(ctx, 0, 0, 13, sp, 1, t*0.005 + p.wobble, false, false);
+    ctx.restore();
+  }
+
+  /* ===================== helpers ===================== */
+  function circleHit(ax,ay,ar,bx,by,br){ return Math.hypot(ax-bx, ay-by) < (ar+br); }
+  function sizeOf(e){ return e.size; }
+
+  /* ===================== update ===================== */
+  function updateEntity(e, dt){
+    if(!e.alive) return;
+    if(e.invuln > 0) e.invuln -= dt;
+
+    const speed = Math.min(W,H) * 0.16;
+
+    if(e.isPlayer){
+      let dx=0, dy=0;
+      if(keys['arrowup']||keys['w']) dy -= 1;
+      if(keys['arrowdown']||keys['s']) dy += 1;
+      if(keys['arrowleft']||keys['a']) dx -= 1;
+      if(keys['arrowright']||keys['d']) dx += 1;
+      if(joyVec.active){ dx += joyVec.x; dy += joyVec.y; }
+      const len = Math.hypot(dx,dy);
+      if(len > 0.05){
+        e.vx = (dx/len) * speed;
+        e.vy = (dy/len) * speed;
+        e.facing = dx < -0.1 ? -1 : (dx > 0.1 ? 1 : e.facing);
+      } else {
+        e.vx *= 0.8; e.vy *= 0.8;
+      }
+    } else {
+      // AI: seek nearest prey/meat that it can safely reach; gentle wander otherwise
+      let best = null, bestD = Infinity, bestType=null;
+      prey.forEach(p=>{
+        const d = Math.hypot(p.x-e.x, p.y-e.y);
+        if(d<bestD){ bestD=d; best=p; bestType='prey'; }
+      });
+      meat.forEach(m=>{
+        const d = Math.hypot(m.x-e.x, m.y-e.y);
+        if(d<bestD){ bestD=d; best=m; bestType='meat'; }
+      });
+      let dx=0, dy=0;
+      e.wanderTimer -= dt;
+      if(best && bestD < Math.min(W,H)*0.6){
+        dx = best.x - e.x; dy = best.y - e.y;
+        const len = Math.hypot(dx,dy)||1;
+        dx/=len; dy/=len;
+      } else {
+        if(e.wanderTimer<=0){
+          e.wanderAngle += rand(-1,1);
+          e.wanderTimer = rand(1,2.5);
+        }
+        dx = Math.cos(e.wanderAngle); dy = Math.sin(e.wanderAngle);
+      }
+      const speedMul = 0.72; // AI a bit slower than player - keeps it beatable & fun
+      e.vx = dx*speed*speedMul;
+      e.vy = dy*speed*speedMul;
+      e.facing = dx < -0.1 ? -1 : (dx > 0.1 ? 1 : e.facing);
+    }
+
+    e.x += e.vx*dt;
+    e.y += e.vy*dt;
+    const marginX = e.size*1.3, marginY = e.size*1.0;
+    e.x = Math.max(marginX, Math.min(W-marginX, e.x));
+    e.y = Math.max(marginY, Math.min(H-marginY, e.y));
+    e.legPhase += dt * (6 + Math.hypot(e.vx,e.vy)*0.02);
+
+    // eat prey (always eatable regardless of size - they're tiny babies)
+    for(let i=prey.length-1;i>=0;i--){
+      const p = prey[i];
+      if(circleHit(e.x,e.y,e.size*0.8,p.x,p.y,13)){
+        prey.splice(i,1);
+        e.eatCount++;
+        e.size = Math.min(maxSize, baseSize + e.eatCount*GROWTH_PREY*(maxSize-baseSize)/40);
+        spawnPrey();
+      }
+    }
+    // eat meat
+    for(let i=meat.length-1;i>=0;i--){
+      const m = meat[i];
+      if(circleHit(e.x,e.y,e.size*0.8,m.x,m.y,14)){
+        meat.splice(i,1);
+        e.eatCount++;
+        e.size = Math.min(maxSize, e.size + GROWTH_MEAT*(maxSize-baseSize)/40);
+        spawnMeat();
+      }
+    }
+  }
+
+  function resolveRivalCollisions(dt){
+    // Only the PLAYER can lose hearts, and only from a clearly bigger rival.
+    const player = entities[0];
+    if(!player.alive || player.invuln > 0) return;
+    for(let i=1;i<entities.length;i++){
+      const rival = entities[i];
+      if(!rival.alive) continue;
+      const dist = Math.hypot(player.x-rival.x, player.y-rival.y);
+      if(dist < (player.size*0.7 + rival.size*0.7)){
+        if(rival.size > player.size * BIGGER_THRESHOLD){
+          player.hearts -= 1;
+          player.invuln = HIT_INVULN_TIME;
+          const kdx = player.x-rival.x, kdy = player.y-rival.y;
+          const klen = Math.hypot(kdx,kdy)||1;
+          player.x += (kdx/klen) * player.size*1.6;
+          player.y += (kdy/klen) * player.size*1.6;
+          if(player.hearts<=0){ player.alive = false; }
+          break;
+        }
+      }
+    }
+  }
+
+  function draw(t){
+    drawBackground(t);
+    meat.forEach(m=>drawMeat(m,t));
+    prey.forEach(p=>drawPrey(p,t));
+    entities.forEach(e=>{
+      if(!e.alive) return;
+      const flash = e.invuln>0 && e.invuln<HIT_INVULN_TIME && Math.floor(e.invuln*10)%2===0;
+      drawDino(ctx, e.x, e.y, e.size, SPECIES[e.skinIdx], e.facing, e.legPhase, flash, false);
+      ctx.font = "12px 'Trebuchet MS', sans-serif";
+      ctx.fillStyle = e.isPlayer ? "#ffe066" : "rgba(255,255,255,0.9)";
+      ctx.textAlign = "center";
+      ctx.fillText(e.isPlayer ? "You" : e.name, e.x, e.y - e.size - 10);
+    });
+  }
+
+  function updateHUD(){
+    const player = entities[0];
+    heartsEl.innerHTML = "";
+    for(let i=0;i<START_HEARTS;i++){
+      const s = document.createElement('span');
+      s.textContent = i < player.hearts ? "❤️" : "🤍";
+      heartsEl.appendChild(s);
+    }
+    scoreboardEl.innerHTML = "";
+    const sorted = [...entities].sort((a,b)=>b.size-a.size);
+    sorted.forEach((e,rank)=>{
+      const chip = document.createElement('div');
+      chip.className = 'scoreChip';
+      chip.textContent = `#${rank+1} ${e.isPlayer? 'You':e.name} — ${e.eatCount} eaten`;
+      if(e.isPlayer) chip.style.borderColor = "#ffce45";
+      scoreboardEl.appendChild(chip);
+    });
+    const m = Math.floor(timeLeft/60);
+    const s = Math.floor(timeLeft%60).toString().padStart(2,'0');
+    timerEl.textContent = `${m}:${s}`;
+  }
+
+  /* ===================== main loop ===================== */
+  function loop(ts){
+    if(!running) return;
+    if(!lastTs) lastTs = ts;
+    const dt = Math.min(0.05, (ts-lastTs)/1000);
+    lastTs = ts;
+
+    timeLeft -= dt;
+    entities.forEach(e=>updateEntity(e, dt));
+    resolveRivalCollisions(dt);
+    draw(ts);
+    updateHUD();
+
+    const player = entities[0];
+    if(timeLeft<=0){ timeLeft = 0; endGame('time'); return; }
+    if(!player.alive){ endGame('dead'); return; }
+    requestAnimationFrame(loop);
+  }
+
+  function endGame(reason){
+    running = false;
+    document.body.classList.remove('playing');
+    const sorted = [...entities].sort((a,b)=>b.size-a.size);
+    const winner = sorted[0];
+    const player = entities[0];
+
+    if(reason==='dead'){
+      overlayTitle.textContent = "Oh no, smashed!";
+      overlaySub.innerHTML = `A bigger dino got you! You ate ${player.eatCount} dinos &amp; meat.<br>Winner so far: ${winner.isPlayer? 'You' : winner.name}!`;
+    } else {
+      const won = winner.isPlayer;
+      overlayTitle.textContent = won ? "🏆 You're the Biggest Dino!" : "Time's Up!";
+      overlaySub.innerHTML = `${winner.isPlayer? 'You' : winner.name} grew the biggest!<br>You ate ${player.eatCount} dinos &amp; meat.`;
+    }
+    overlay.style.display = 'flex';
+  }
+
+  /* ===================== flow control ===================== */
+  startBtn.addEventListener('click', ()=>{
+    if(chosenSkin===null) return;
+    setupScreen.style.display = 'none';
+    gameWrap.style.display = 'block';
+    document.body.classList.add('playing');
+    resizeCanvas();
+    lastTs = 0;
+    resetGame(chosenSkin);
+    requestAnimationFrame(loop);
+  });
+
+  againBtn.addEventListener('click', ()=>{
+    overlay.style.display = 'none';
+    gameWrap.style.display = 'block';
+    document.body.classList.add('playing');
+    resizeCanvas();
+    lastTs = 0;
+    resetGame(chosenSkin);
+    requestAnimationFrame(loop);
+  });
+
+})();
+</script>
+</body>
+</html>
