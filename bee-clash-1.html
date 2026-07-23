@@ -1,0 +1,716 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bee Clash</title>
+<style>
+  :root{
+    --honey: #ffb703;
+    --honey-dark: #d98a04;
+    --comb: #3a2410;
+    --comb-light: #5c3a19;
+    --cream: #fff3d6;
+    --ink: #201305;
+    --danger: #e63946;
+    --leaf: #6a994e;
+  }
+  *{ box-sizing: border-box; }
+  html,body{
+    margin:0; padding:0; min-height:100%;
+    background: radial-gradient(circle at 50% 0%, var(--comb-light), var(--comb) 70%);
+    font-family: 'Trebuchet MS', 'Segoe UI', sans-serif;
+    color: var(--cream);
+    overflow-x: hidden;
+    overflow-y: auto;
+    -webkit-tap-highlight-color: transparent;
+    -webkit-overflow-scrolling: touch;
+  }
+  #app{
+    display:flex; flex-direction:column; align-items:center; justify-content:flex-start;
+    min-height:100%; padding: 14px;
+  }
+  h1.title{
+    font-family: 'Georgia', serif;
+    font-size: clamp(28px, 6vw, 48px);
+    letter-spacing: 2px;
+    margin: 0 0 4px 0;
+    color: var(--honey);
+    text-shadow: 0 3px 0 var(--ink), 0 0 18px rgba(255,183,3,0.4);
+  }
+  .subtitle{
+    color: var(--cream);
+    opacity:0.75;
+    font-size: 13px;
+    margin-bottom: 14px;
+    letter-spacing:1px;
+    text-transform: uppercase;
+  }
+  .panel{
+    background: rgba(0,0,0,0.28);
+    border: 2px solid var(--honey-dark);
+    border-radius: 16px;
+    padding: 18px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.4);
+    max-width: 900px;
+    width: 100%;
+  }
+  /* --- skin select --- */
+  #skinGrid{
+    display:grid;
+    grid-template-columns: repeat(auto-fill, minmax(78px, 1fr));
+    gap: 10px;
+    margin: 14px 0;
+  }
+  .skinCard{
+    background: rgba(255,255,255,0.05);
+    border: 2px solid transparent;
+    border-radius: 10px;
+    padding: 8px 4px;
+    display:flex; flex-direction:column; align-items:center;
+    cursor:pointer;
+    transition: transform 0.12s ease, border-color 0.12s ease, background 0.12s ease;
+  }
+  .skinCard:hover{ transform: translateY(-3px); background: rgba(255,255,255,0.1); }
+  .skinCard.selected{
+    border-color: var(--honey);
+    background: rgba(255,183,3,0.15);
+    box-shadow: 0 0 14px rgba(255,183,3,0.5);
+  }
+  .skinCard canvas{ pointer-events:none; }
+  .skinCard span{
+    font-size: 10px;
+    margin-top: 4px;
+    text-align:center;
+    color: var(--cream);
+    opacity:0.85;
+  }
+  .startBtn, .again-btn{
+    display:block;
+    margin: 18px auto 4px auto;
+    padding: 12px 34px;
+    font-size: 18px;
+    font-weight:bold;
+    letter-spacing: 1px;
+    color: var(--ink);
+    background: linear-gradient(180deg, var(--honey), var(--honey-dark));
+    border: none;
+    border-radius: 999px;
+    cursor: pointer;
+    box-shadow: 0 6px 0 #94620a, 0 10px 18px rgba(0,0,0,0.4);
+    transition: transform 0.08s ease;
+  }
+  .startBtn:disabled{
+    opacity: 0.4;
+    cursor: not-allowed;
+    box-shadow: none;
+  }
+  .startBtn:active:not(:disabled), .again-btn:active{
+    transform: translateY(4px);
+    box-shadow: 0 2px 0 #94620a, 0 4px 8px rgba(0,0,0,0.4);
+  }
+  /* --- game screen --- */
+  #gameWrap{ display:none; flex-direction:column; align-items:center; }
+  #hud{
+    display:flex; justify-content:space-between; align-items:center;
+    width: 800px; max-width: 96vw;
+    margin-bottom: 6px;
+    font-size: 15px;
+  }
+  #timer{
+    font-size: 22px;
+    font-weight:bold;
+    color: var(--honey);
+    background: rgba(0,0,0,0.35);
+    padding: 4px 14px;
+    border-radius: 10px;
+    border: 1px solid var(--honey-dark);
+  }
+  #hearts span{ font-size:18px; margin-right:2px; filter: drop-shadow(0 0 3px rgba(0,0,0,0.6)); }
+  #scoreboard{
+    display:flex; gap: 10px; flex-wrap: wrap;
+    font-size: 12px;
+  }
+  .scoreChip{
+    background: rgba(0,0,0,0.35);
+    border-radius: 8px;
+    padding: 3px 8px;
+    display:flex; align-items:center; gap:4px;
+    border: 1px solid rgba(255,255,255,0.15);
+  }
+  canvas#game{
+    background: #f6d98a;
+    border-radius: 14px;
+    border: 4px solid var(--honey-dark);
+    box-shadow: 0 12px 30px rgba(0,0,0,0.5);
+    max-width: 96vw;
+    touch-action: none;
+  }
+  #hint{
+    font-size: 12px;
+    opacity: 0.65;
+    margin-top: 8px;
+    text-align:center;
+  }
+  /* --- game over --- */
+  #overlay{
+    display:none;
+    position: fixed; inset:0;
+    background: rgba(0,0,0,0.75);
+    align-items:center; justify-content:center;
+    flex-direction:column;
+    z-index: 20;
+    text-align:center;
+  }
+  #overlay h2{
+    color: var(--honey);
+    font-size: clamp(26px, 5vw, 40px);
+    margin-bottom: 6px;
+    font-family: 'Georgia', serif;
+  }
+  #overlay p{ margin: 4px 0; font-size:16px; }
+  .mobileControls{
+    display:none;
+    margin-top: 10px;
+    grid-template-columns: repeat(3, 56px);
+    grid-template-rows: repeat(3, 56px);
+    gap: 4px;
+  }
+  .mobileControls button{
+    background: rgba(255,183,3,0.85);
+    border: 2px solid var(--honey-dark);
+    border-radius: 10px;
+    font-size: 20px;
+    color: var(--ink);
+  }
+  @media (pointer:coarse){
+    .mobileControls{ display:grid; }
+  }
+</style>
+</head>
+<body>
+<div id="app">
+
+  <div id="setupScreen">
+    <h1 class="title">🐝 Bee Clash</h1>
+    <div class="subtitle">Pick your bee &middot; Collect honey &middot; Rule the meadow</div>
+    <div class="panel">
+      <div id="skinGrid"></div>
+      <button class="startBtn" id="startBtn" disabled>Choose a bee to start</button>
+    </div>
+  </div>
+
+  <div id="gameWrap">
+    <div id="hud">
+      <div>
+        <div id="hearts"></div>
+        <div id="scoreboard"></div>
+      </div>
+      <div id="timer">5:00</div>
+    </div>
+    <canvas id="game" width="800" height="560"></canvas>
+    <div id="hint">Move: Arrow keys / WASD &nbsp;|&nbsp; Grab honey, dodge rocks &amp; blades</div>
+    <div class="mobileControls" id="mobileControls">
+      <span></span><button data-k="up">▲</button><span></span>
+      <button data-k="left">◀</button><span></span><button data-k="right">▶</button>
+      <span></span><button data-k="down">▼</button><span></span>
+    </div>
+  </div>
+
+</div>
+
+<div id="overlay">
+  <h2 id="overlayTitle">Game Over</h2>
+  <p id="overlaySub"></p>
+  <button class="again-btn" id="againBtn">Play Again</button>
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  /* ===================== SKINS ===================== */
+  const SKINS = [
+    {name:"Honey Gold",   body:"#ffb703", stripe:"#3a2410", wing:"#fff7e0"},
+    {name:"Midnight",     body:"#2b2d42", stripe:"#f4a261", wing:"#d9d9ff"},
+    {name:"Rose Petal",   body:"#ffafcc", stripe:"#7a1f3d", wing:"#ffe5ec"},
+    {name:"Lime Buzz",    body:"#b5e655", stripe:"#3d5300", wing:"#eaffd0"},
+    {name:"Sky Drone",    body:"#8ecae6", stripe:"#023047", wing:"#e8f6fb"},
+    {name:"Lava",         body:"#ff5400", stripe:"#4d0000", wing:"#ffd9b3"},
+    {name:"Royal Purple", body:"#9d4edd", stripe:"#240046", wing:"#e9d6ff"},
+    {name:"Candy",        body:"#ff6392", stripe:"#5e0022", wing:"#ffd6e2"},
+    {name:"Forest",       body:"#588157", stripe:"#232d1a", wing:"#dbe7c9"},
+    {name:"Storm Grey",   body:"#adb5bd", stripe:"#212529", wing:"#f1f3f5"}
+  ];
+
+  const AI_NAMES = ["Buzzwick","Stinger","Drone-9","Nectara"];
+
+  /* ===================== DOM refs ===================== */
+  const setupScreen = document.getElementById('setupScreen');
+  const gameWrap = document.getElementById('gameWrap');
+  const skinGrid = document.getElementById('skinGrid');
+  const startBtn = document.getElementById('startBtn');
+  const canvas = document.getElementById('game');
+  const ctx = canvas.getContext('2d');
+  const heartsEl = document.getElementById('hearts');
+  const scoreboardEl = document.getElementById('scoreboard');
+  const timerEl = document.getElementById('timer');
+  const overlay = document.getElementById('overlay');
+  const overlayTitle = document.getElementById('overlayTitle');
+  const overlaySub = document.getElementById('overlaySub');
+  const againBtn = document.getElementById('againBtn');
+  const mobileControls = document.getElementById('mobileControls');
+
+  const W = canvas.width, H = canvas.height;
+
+  /* ===================== bee drawing ===================== */
+  function drawBee(c, x, y, size, skin, wingPhase, flash){
+    c.save();
+    c.translate(x, y);
+
+    // wings
+    const wingFlap = Math.sin(wingPhase) * 0.4 + 0.6;
+    c.save();
+    c.globalAlpha = 0.85;
+    c.fillStyle = skin.wing;
+    c.beginPath();
+    c.ellipse(-size*0.35, -size*0.55, size*0.55, size*0.35*wingFlap, -0.4, 0, Math.PI*2);
+    c.fill();
+    c.beginPath();
+    c.ellipse(size*0.35, -size*0.55, size*0.55, size*0.35*wingFlap, 0.4, 0, Math.PI*2);
+    c.fill();
+    c.restore();
+
+    // body
+    if(flash){ c.fillStyle = "#ffffff"; } else { c.fillStyle = skin.body; }
+    c.beginPath();
+    c.ellipse(0, 0, size*0.75, size, 0, 0, Math.PI*2);
+    c.fill();
+
+    // stripes
+    if(!flash){
+      c.fillStyle = skin.stripe;
+      for(let i=-1;i<=1;i++){
+        c.beginPath();
+        c.ellipse(0, i*size*0.5, size*0.72, size*0.16, 0, 0, Math.PI*2);
+        c.fill();
+      }
+    }
+
+    // eyes
+    c.fillStyle = "#1a1a1a";
+    c.beginPath(); c.arc(-size*0.28, -size*0.55, size*0.13, 0, Math.PI*2); c.fill();
+    c.beginPath(); c.arc(size*0.28, -size*0.55, size*0.13, 0, Math.PI*2); c.fill();
+
+    // stinger
+    c.fillStyle = skin.stripe;
+    c.beginPath();
+    c.moveTo(-size*0.12, size*0.95);
+    c.lineTo(size*0.12, size*0.95);
+    c.lineTo(0, size*1.25);
+    c.closePath();
+    c.fill();
+
+    c.restore();
+  }
+
+  /* ===================== skin select UI ===================== */
+  let chosenSkin = null;
+  SKINS.forEach((skin, i)=>{
+    const card = document.createElement('div');
+    card.className = 'skinCard';
+    const cnv = document.createElement('canvas');
+    cnv.width = 60; cnv.height = 60;
+    const cctx = cnv.getContext('2d');
+    drawBee(cctx, 30, 34, 16, skin, 1.2, false);
+    const label = document.createElement('span');
+    label.textContent = skin.name;
+    card.appendChild(cnv);
+    card.appendChild(label);
+    card.addEventListener('click', ()=>{
+      document.querySelectorAll('.skinCard').forEach(el=>el.classList.remove('selected'));
+      card.classList.add('selected');
+      chosenSkin = i;
+      startBtn.disabled = false;
+      startBtn.textContent = "Start Bee Clash";
+    });
+    skinGrid.appendChild(card);
+  });
+
+  /* ===================== game constants ===================== */
+  const GAME_LENGTH = 5*60; // seconds
+  const MAX_HONEY_ON_FIELD = 8;
+  const NUM_OBSTACLES_ROCK = 8;
+  const NUM_OBSTACLES_BLADE = 7;
+  const BASE_SIZE = 20;
+  const MAX_SIZE = 42;
+  const GROWTH_PER_HONEY = 1.6;
+  const HIT_INVULN_TIME = 1.2; // seconds
+
+  let entities = []; // player + AIs
+  let honeys = [];
+  let obstacles = [];
+  let timeLeft = GAME_LENGTH;
+  let running = false;
+  let lastTs = 0;
+  let keys = {};
+
+  function rand(a,b){ return a + Math.random()*(b-a); }
+
+  function makeEntity(isPlayer, skinIdx, name){
+    return {
+      isPlayer, name, skinIdx,
+      x: rand(80, W-80), y: rand(80, H-80),
+      vx:0, vy:0,
+      size: BASE_SIZE,
+      honeyCount: 0,
+      hearts: 3,
+      invuln: 0,
+      wingPhase: Math.random()*10,
+      alive: true,
+      targetHoney: null,
+      wanderAngle: Math.random()*Math.PI*2
+    };
+  }
+
+  function resetGame(skinIdx){
+    entities = [];
+    entities.push(makeEntity(true, skinIdx, "You"));
+    // pick 3 distinct AI skins different from player's
+    const pool = SKINS.map((_,i)=>i).filter(i=>i!==skinIdx);
+    for(let i=0;i<3;i++){
+      const idx = pool.splice(Math.floor(Math.random()*pool.length),1)[0];
+      entities.push(makeEntity(false, idx, AI_NAMES[i]));
+    }
+
+    obstacles = [];
+    for(let i=0;i<NUM_OBSTACLES_ROCK;i++){
+      obstacles.push({type:'rock', x:rand(40,W-40), y:rand(40,H-40), r: rand(18,28)});
+    }
+    for(let i=0;i<NUM_OBSTACLES_BLADE;i++){
+      obstacles.push({type:'blade', x:rand(40,W-40), y:rand(40,H-40), r: rand(16,22), angle: rand(0,Math.PI*2)});
+    }
+    // keep obstacles away from entity start positions a bit
+    obstacles = obstacles.filter(o=>{
+      return entities.every(e => Math.hypot(e.x-o.x,e.y-o.y) > 70);
+    });
+
+    honeys = [];
+    for(let i=0;i<MAX_HONEY_ON_FIELD;i++){
+      spawnHoney();
+    }
+
+    timeLeft = GAME_LENGTH;
+    running = true;
+  }
+
+  function spawnHoney(){
+    let x,y,tries=0;
+    do{
+      x = rand(30, W-30); y = rand(30, H-30); tries++;
+    } while(tries<20 && obstacles.some(o=>Math.hypot(o.x-x,o.y-y) < o.r+20));
+    honeys.push({x,y,wobble:Math.random()*10});
+  }
+
+  /* ===================== input ===================== */
+  window.addEventListener('keydown', e=>{
+    keys[e.key.toLowerCase()] = true;
+  });
+  window.addEventListener('keyup', e=>{
+    keys[e.key.toLowerCase()] = false;
+  });
+  mobileControls.querySelectorAll('button').forEach(btn=>{
+    const k = btn.dataset.k;
+    const map = {up:'arrowup', down:'arrowdown', left:'arrowleft', right:'arrowright'};
+    const key = map[k];
+    const set = (v)=>e=>{ e.preventDefault(); keys[key]=v; };
+    btn.addEventListener('touchstart', set(true), {passive:false});
+    btn.addEventListener('touchend', set(false), {passive:false});
+    btn.addEventListener('mousedown', set(true));
+    btn.addEventListener('mouseup', set(false));
+    btn.addEventListener('mouseleave', set(false));
+  });
+
+  /* ===================== drawing helpers ===================== */
+  function drawBackground(){
+    ctx.fillStyle = "#f6d98a";
+    ctx.fillRect(0,0,W,H);
+    // honeycomb pattern
+    ctx.save();
+    ctx.strokeStyle = "rgba(180,120,10,0.15)";
+    ctx.lineWidth = 2;
+    const hexR = 34;
+    const hexW = hexR*Math.sqrt(3);
+    const hexH = hexR*2*0.75;
+    for(let row=-1; row*hexH < H+hexR; row++){
+      for(let col=-1; col*hexW < W+hexR; col++){
+        const offsetX = (row%2===0) ? 0 : hexW/2;
+        const cx = col*hexW + offsetX;
+        const cy = row*hexH;
+        drawHexagon(cx, cy, hexR);
+      }
+    }
+    ctx.restore();
+  }
+  function drawHexagon(cx,cy,r){
+    ctx.beginPath();
+    for(let i=0;i<6;i++){
+      const a = Math.PI/180 * (60*i - 30);
+      const px = cx + r*Math.cos(a);
+      const py = cy + r*Math.sin(a);
+      if(i===0) ctx.moveTo(px,py); else ctx.lineTo(px,py);
+    }
+    ctx.closePath();
+    ctx.stroke();
+  }
+
+  function drawRock(o){
+    ctx.save();
+    ctx.translate(o.x,o.y);
+    ctx.fillStyle = "#7d7d7d";
+    ctx.beginPath();
+    ctx.moveTo(-o.r, o.r*0.4);
+    ctx.lineTo(-o.r*0.5, -o.r*0.8);
+    ctx.lineTo(o.r*0.3, -o.r);
+    ctx.lineTo(o.r, -o.r*0.1);
+    ctx.lineTo(o.r*0.6, o.r*0.9);
+    ctx.lineTo(-o.r*0.4, o.r);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = "rgba(255,255,255,0.15)";
+    ctx.beginPath();
+    ctx.ellipse(-o.r*0.2,-o.r*0.3,o.r*0.35,o.r*0.2,0.3,0,Math.PI*2);
+    ctx.fill();
+    ctx.restore();
+  }
+  function drawBlade(o){
+    ctx.save();
+    ctx.translate(o.x,o.y);
+    ctx.rotate(o.angle);
+    const grd = ctx.createLinearGradient(0,-o.r,0,o.r);
+    grd.addColorStop(0,"#eaeaea");
+    grd.addColorStop(0.5,"#9fa6ab");
+    grd.addColorStop(1,"#5b6165");
+    ctx.fillStyle = grd;
+    ctx.beginPath();
+    ctx.moveTo(0,-o.r*1.6);
+    ctx.lineTo(o.r*0.35,0);
+    ctx.lineTo(0,o.r*1.6);
+    ctx.lineTo(-o.r*0.35,0);
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = "rgba(0,0,0,0.3)";
+    ctx.lineWidth=1;
+    ctx.stroke();
+    ctx.restore();
+  }
+  function drawHoney(h, t){
+    const bob = Math.sin(t*0.003 + h.wobble)*3;
+    ctx.save();
+    ctx.translate(h.x, h.y + bob);
+    // bucket
+    ctx.fillStyle = "#8a5a1a";
+    ctx.beginPath();
+    ctx.moveTo(-10,-6);
+    ctx.lineTo(10,-6);
+    ctx.lineTo(8,10);
+    ctx.lineTo(-8,10);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = "#ffb703";
+    ctx.beginPath();
+    ctx.ellipse(0,-6,10,4,0,0,Math.PI*2);
+    ctx.fill();
+    ctx.strokeStyle = "#5c3a19";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(0,-10,7,Math.PI*1.1,Math.PI*1.9);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  /* ===================== update ===================== */
+  function circleHit(ax,ay,ar,bx,by,br){
+    return Math.hypot(ax-bx, ay-by) < (ar+br);
+  }
+
+  function updateEntity(e, dt){
+    if(!e.alive) return;
+    if(e.invuln > 0) e.invuln -= dt;
+
+    const speed = 165;
+    if(e.isPlayer){
+      let dx=0, dy=0;
+      if(keys['arrowup']||keys['w']) dy -= 1;
+      if(keys['arrowdown']||keys['s']) dy += 1;
+      if(keys['arrowleft']||keys['a']) dx -= 1;
+      if(keys['arrowright']||keys['d']) dx += 1;
+      const len = Math.hypot(dx,dy) || 1;
+      e.vx = (dx/len) * speed;
+      e.vy = (dy/len) * speed;
+    } else {
+      // simple AI: seek nearest honey, else wander
+      let nearest = null, bestD = Infinity;
+      honeys.forEach(h=>{
+        const d = Math.hypot(h.x-e.x, h.y-e.y);
+        if(d<bestD){ bestD=d; nearest=h; }
+      });
+      let dx=0, dy=0;
+      if(nearest){
+        dx = nearest.x - e.x; dy = nearest.y - e.y;
+        const len = Math.hypot(dx,dy)||1;
+        dx/=len; dy/=len;
+      } else {
+        e.wanderAngle += (Math.random()-0.5)*0.5;
+        dx = Math.cos(e.wanderAngle); dy = Math.sin(e.wanderAngle);
+      }
+      // light obstacle avoidance
+      obstacles.forEach(o=>{
+        const d = Math.hypot(o.x-e.x, o.y-e.y);
+        if(d < o.r + 55){
+          const ax=(e.x-o.x)/d, ay=(e.y-o.y)/d;
+          dx += ax*1.4; dy += ay*1.4;
+        }
+      });
+      const len2 = Math.hypot(dx,dy)||1;
+      e.vx = (dx/len2)*speed*0.85;
+      e.vy = (dy/len2)*speed*0.85;
+    }
+
+    e.x += e.vx*dt;
+    e.y += e.vy*dt;
+    e.x = Math.max(e.size*0.7, Math.min(W-e.size*0.7, e.x));
+    e.y = Math.max(e.size*0.9, Math.min(H-e.size*0.9, e.y));
+    e.wingPhase += dt*20;
+
+    // honey collision
+    for(let i=honeys.length-1;i>=0;i--){
+      const h = honeys[i];
+      if(circleHit(e.x,e.y,e.size*0.75,h.x,h.y,12)){
+        honeys.splice(i,1);
+        e.honeyCount++;
+        e.size = Math.min(MAX_SIZE, BASE_SIZE + e.honeyCount*GROWTH_PER_HONEY);
+        spawnHoney();
+      }
+    }
+
+    // obstacle collision
+    if(e.invuln<=0){
+      for(const o of obstacles){
+        const hitR = o.type==='rock' ? o.r*0.8 : o.r*1.1;
+        if(circleHit(e.x,e.y,e.size*0.6,o.x,o.y,hitR)){
+          e.hearts -= 1;
+          e.invuln = HIT_INVULN_TIME;
+          // knockback
+          const kdx = e.x-o.x, kdy = e.y-o.y;
+          const klen = Math.hypot(kdx,kdy)||1;
+          e.x += (kdx/klen)*24;
+          e.y += (kdy/klen)*24;
+          if(e.hearts<=0){ e.alive=false; }
+          break;
+        }
+      }
+    }
+  }
+
+  function draw(t){
+    drawBackground();
+    obstacles.forEach(o=> o.type==='rock' ? drawRock(o) : drawBlade(o));
+    honeys.forEach(h=> drawHoney(h,t));
+    entities.forEach(e=>{
+      if(!e.alive) return;
+      const flash = e.invuln>0 && Math.floor(e.invuln*10)%2===0;
+      drawBee(ctx, e.x, e.y, e.size, SKINS[e.skinIdx], e.wingPhase, flash);
+      // name tag
+      ctx.font = "11px 'Trebuchet MS', sans-serif";
+      ctx.fillStyle = e.isPlayer ? "#ffe066" : "rgba(255,255,255,0.85)";
+      ctx.textAlign = "center";
+      ctx.fillText(e.isPlayer ? "You" : e.name, e.x, e.y - e.size - 8);
+    });
+  }
+
+  function updateHUD(){
+    const player = entities[0];
+    heartsEl.innerHTML = "";
+    for(let i=0;i<3;i++){
+      const s = document.createElement('span');
+      s.textContent = i < player.hearts ? "❤️" : "🤍";
+      heartsEl.appendChild(s);
+    }
+    scoreboardEl.innerHTML = "";
+    const sorted = [...entities].sort((a,b)=>b.honeyCount-a.honeyCount);
+    sorted.forEach(e=>{
+      const chip = document.createElement('div');
+      chip.className = 'scoreChip';
+      chip.innerHTML = `<span>🍯</span><span>${e.isPlayer? 'You':e.name}: ${e.honeyCount}</span>`;
+      if(e.isPlayer) chip.style.borderColor = "#ffb703";
+      scoreboardEl.appendChild(chip);
+    });
+    const m = Math.floor(timeLeft/60);
+    const s = Math.floor(timeLeft%60).toString().padStart(2,'0');
+    timerEl.textContent = `${m}:${s}`;
+  }
+
+  /* ===================== main loop ===================== */
+  function loop(ts){
+    if(!running) return;
+    if(!lastTs) lastTs = ts;
+    const dt = Math.min(0.05, (ts-lastTs)/1000);
+    lastTs = ts;
+
+    timeLeft -= dt;
+    entities.forEach(e=>updateEntity(e, dt));
+    draw(ts);
+    updateHUD();
+
+    const player = entities[0];
+    if(timeLeft<=0){
+      timeLeft = 0;
+      endGame('time');
+      return;
+    }
+    if(!player.alive){
+      endGame('dead');
+      return;
+    }
+    requestAnimationFrame(loop);
+  }
+
+  function endGame(reason){
+    running = false;
+    const sorted = [...entities].sort((a,b)=>b.honeyCount-a.honeyCount);
+    const winner = sorted[0];
+    const player = entities[0];
+
+    if(reason==='dead'){
+      overlayTitle.textContent = "You've Been Stung Out!";
+      overlaySub.innerHTML = `You lost all your hearts.<br>Final honey: ${player.honeyCount} 🍯<br>Winner: ${winner.isPlayer? 'You' : winner.name} with ${winner.honeyCount} buckets!`;
+    } else {
+      const won = winner.isPlayer;
+      overlayTitle.textContent = won ? "🏆 You Win Bee Clash!" : "Time's Up!";
+      overlaySub.innerHTML = `${winner.isPlayer? 'You' : winner.name} collected the most honey: ${winner.honeyCount} buckets!<br>Your total: ${player.honeyCount} 🍯`;
+    }
+    overlay.style.display = 'flex';
+  }
+
+  /* ===================== flow control ===================== */
+  startBtn.addEventListener('click', ()=>{
+    if(chosenSkin===null) return;
+    setupScreen.style.display = 'none';
+    gameWrap.style.display = 'flex';
+    lastTs = 0;
+    resetGame(chosenSkin);
+    requestAnimationFrame(loop);
+  });
+
+  againBtn.addEventListener('click', ()=>{
+    overlay.style.display = 'none';
+    lastTs = 0;
+    resetGame(chosenSkin);
+    requestAnimationFrame(loop);
+  });
+
+})();
+</script>
+</body>
+</html>
