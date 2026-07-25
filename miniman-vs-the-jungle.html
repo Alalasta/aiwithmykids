@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Miniman vs the Jungle</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;700;800&family=Nunito:wght@400;600;800&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --canopy-dark:#0B2818;
+    --jungle-green:#1B4332;
+    --jungle-mid:#2D6A4F;
+    --gold:#E9C46A;
+    --danger:#BC4749;
+    --cream:#F1F5E9;
+    --vine:#95D5B2;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin:0; padding:0;
+    width:100vw; height:100vh;
+    background: var(--canopy-dark);
+    font-family: 'Nunito', sans-serif;
+    color: var(--cream);
+    overflow:hidden;
+    position:fixed;
+    inset:0;
+  }
+  #root { width:100vw; height:100vh; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react/18.3.1/umd/react.production.min.js"></script>
+<script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.3.1/umd/react-dom.production.min.js"></script>
+
+<script>
+const { useState, useRef, useEffect, useCallback } = React;
+
+const GROUND_Y = 70;
+const PLAYER_X = 110;
+const PLAYER_W = 44;
+const PLAYER_H = 58;
+const GRAVITY = 0.62;
+const JUMP_V = 13.5; // Positive velocity pushes character upward
+const TOTAL_TO_WIN = 16;
+const BASE_SPEED = 5.2;
+const INVINCIBLE_MS = 1200;
+
+function rectsOverlap(a, b) {
+  return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
+}
+
+function makeObstacle(idSeed, viewportW) {
+  const isPlant = Math.random() < 0.55;
+  if (isPlant) {
+    const h = 60 + Math.random() * 34;
+    return { id: idSeed, type: 'plant', x: viewportW + 40, w: 46, h, passed: false };
+  }
+  const h = 34 + Math.random() * 14;
+  return { id: idSeed, type: 'log', x: viewportW + 40, w: 54, h, passed: false };
+}
+
+function makeHeart(idSeed, viewportW) {
+  return { id: idSeed, x: viewportW + 60 + Math.random() * 120, y: 130 + Math.random() * 100, w: 28, h: 26, taken: false };
+}
+
+function MiniMan({ y, hurt, jumping }) {
+  return React.createElement("div", {
+    style: {
+      position: 'absolute',
+      left: PLAYER_X,
+      bottom: GROUND_Y + y,
+      width: PLAYER_W,
+      height: PLAYER_H,
+      transition: 'filter 0.1s',
+      filter: hurt ? 'drop-shadow(0 0 6px #ff4d4d) brightness(1.4)' : 'none',
+      opacity: hurt ? 0.55 : 1
+    }
+  }, 
+    React.createElement("div", { style: { position: 'absolute', top: -6, left: 6, width: 32, height: 14, background: '#D6A15A', borderRadius: '10px 10px 2px 2px', boxShadow: '0 2px 0 #8a5a2b' } }),
+    React.createElement("div", { style: { position: 'absolute', top: 6, left: 0, width: 44, height: 5, background: '#8a5a2b', borderRadius: 4 } }),
+    React.createElement("div", { style: { position: 'absolute', top: 10, left: 10, width: 24, height: 22, background: '#F4C89B', borderRadius: '50%' } }),
+    React.createElement("div", { style: { position: 'absolute', top: 30, left: 8, width: 28, height: 20, background: '#2D6A4F', borderRadius: 6 } }),
+    React.createElement("div", { style: { position: 'absolute', top: 48, left: 10, width: 8, height: 10, background: '#5B3A29', borderRadius: 2, transform: jumping ? 'rotate(-18deg)' : 'none' } }),
+    React.createElement("div", { style: { position: 'absolute', top: 48, left: 26, width: 8, height: 10, background: '#5B3A29', borderRadius: 2, transform: jumping ? 'rotate(18deg)' : 'none' } })
+  );
+}
+
+function Plant({ o }) {
+  return React.createElement("div", { style: { position: 'absolute', left: o.x, bottom: GROUND_Y, width: o.w, height: o.h } },
+    React.createElement("div", { style: { position: 'absolute', bottom: 0, left: o.w / 2 - 5, width: 10, height: o.h * 0.55, background: '#3A7D44', borderRadius: 4 } }),
+    React.createElement("div", { style: { position: 'absolute', top: 0, left: 0, width: o.w, height: o.h * 0.5, background: 'radial-gradient(circle at 50% 40%, #5FAE58, #2F6B39)', borderRadius: '50% 50% 40% 40%', clipPath: 'polygon(0 30%,100% 30%,85% 100%,15% 100%)' } }),
+    React.createElement("div", { style: { position: 'absolute', top: o.h * 0.18, left: o.w * 0.28, width: o.w * 0.44, height: o.h * 0.16, background: '#BC4749', borderRadius: '0 0 50% 50%' } })
+  );
+}
+
+function Log({ o }) {
+  return React.createElement("div", { style: { position: 'absolute', left: o.x, bottom: GROUND_Y, width: o.w, height: o.h, background: 'linear-gradient(180deg,#8a5a2b,#6b4423)', borderRadius: 8, boxShadow: 'inset 0 0 0 3px rgba(0,0,0,0.15)' } },
+    [...Array(3)].map((_, i) => React.createElement("div", { key: i, style: { position: 'absolute', left: 8 + i * 14, top: 4, bottom: 4, width: 3, background: 'rgba(0,0,0,0.2)', borderRadius: 2 } }))
+  );
+}
+
+function Heart({ h }) {
+  return React.createElement("div", { style: { position: 'absolute', left: h.x, bottom: GROUND_Y + h.y, width: h.w, height: h.h, fontSize: 24, lineHeight: '26px', textAlign: 'center', filter: 'drop-shadow(0 0 4px #E9C46A)', animation: 'float 1.4s ease-in-out infinite alternate' } }, "❤️");
+}
+
+function HUD({ hearts, progress, total }) {
+  return React.createElement("div", { style: { position: 'absolute', top: 20, left: 24, right: 24, display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontFamily: "'Baloo 2', sans-serif" } },
+    React.createElement("div", { style: { display: 'flex', gap: 6 } }, [0, 1, 2].map(i => React.createElement("span", { key: i, style: { fontSize: 28, opacity: i < hearts ? 1 : 0.25, transition: 'opacity 0.2s' } }, "❤️"))),
+    React.createElement("div", { style: { background: 'rgba(11,40,24,0.75)', border: '2px solid #3A7D44', borderRadius: 20, padding: '6px 16px', fontWeight: 700, fontSize: 16, letterSpacing: 0.5 } }, Math.min(progress, total), " / ", total, " CLEARED")
+  );
+}
+
+function Overlay({ status, onRestart }) {
+  if (status === 'playing') return null;
+  const won = status === 'won';
+  return React.createElement("div", { style: { position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 14, background: 'rgba(6,20,12,0.85)', backdropFilter: 'blur(4px)', textAlign: 'center', padding: 20, zIndex: 10 } },
+    React.createElement("div", { style: { fontSize: 54 } }, won ? '🏆' : '💀'),
+    React.createElement("div", { style: { fontFamily: "'Baloo 2', sans-serif", fontSize: 36, fontWeight: 800, color: won ? '#E9C46A' : '#E07A7A' } }, won ? 'Miniman Conquers the Jungle!' : 'Game Over'),
+    React.createElement("button", { onClick: onRestart, style: { marginTop: 12, background: '#E9C46A', color: '#0B2818', border: 'none', fontFamily: "'Baloo 2', sans-serif", fontWeight: 700, fontSize: 20, padding: '12px 32px', borderRadius: 30, cursor: 'pointer' } }, won ? 'Play Again' : 'Try Again')
+  );
+}
+
+function Game() {
+  const [, setTick] = useState(0);
+  const [status, setStatus] = useState('playing');
+  const stateRef = useRef(null);
+  const rafRef = useRef(null);
+  const idCounter = useRef(1);
+
+  function freshState() {
+    const w = window.innerWidth;
+    return {
+      y: 0,
+      vy: 0,
+      jumping: false,
+      hearts: 3,
+      progress: 0,
+      speed: BASE_SPEED,
+      obstacles: [makeObstacle(idCounter.current++, w)],
+      floatHearts: [],
+      spawnTimer: 0,
+      heartTimer: 90 + Math.random() * 60,
+      invincibleUntil: 0,
+      hurtFlash: false,
+      running: true
+    };
+  }
+
+  useEffect(() => {
+    stateRef.current = freshState();
+    setStatus('playing');
+
+    function tryJump() {
+      const s = stateRef.current;
+      if (!s || !s.running) return;
+      if (!s.jumping) {
+        s.vy = JUMP_V;
+        s.jumping = true;
+      }
+    }
+    stateRef.current.tryJump = tryJump;
+
+    function onKeyDown(e) {
+      if (['Space', 'ArrowUp', 'KeyW'].includes(e.code)) {
+        e.preventDefault();
+        tryJump();
+      }
+    }
+    window.addEventListener('keydown', onKeyDown);
+
+    let last = performance.now();
+
+    function loop(now) {
+      const dt = Math.min((now - last) / 16.67, 2.2);
+      last = now;
+      const s = stateRef.current;
+      const curH = window.innerHeight;
+      const curW = window.innerWidth;
+      const maxY = curH - GROUND_Y - PLAYER_H - 10;
+
+      if (s && s.running) {
+        // Apply physics
+        s.vy -= GRAVITY * dt;
+        s.y += s.vy * dt;
+
+        // Ground Collision
+        if (s.y <= 0) {
+          s.y = 0;
+          s.vy = 0;
+          s.jumping = false;
+        }
+
+        // Ceiling Collision
+        if (s.y >= maxY) {
+          s.y = maxY;
+          s.vy = 0;
+        }
+
+        s.speed = BASE_SPEED + Math.min(s.progress, TOTAL_TO_WIN) * 0.18;
+
+        s.obstacles.forEach(o => { o.x -= s.speed * dt; });
+        s.obstacles = s.obstacles.filter(o => o.x > -80);
+
+        s.spawnTimer -= dt;
+        if (s.spawnTimer <= 0) {
+          s.obstacles.push(makeObstacle(idCounter.current++, curW));
+          s.spawnTimer = 62 + Math.random() * 46;
+        }
+
+        s.floatHearts.forEach(h => { h.x -= s.speed * dt; });
+        s.floatHearts = s.floatHearts.filter(h => h.x > -60 && !h.taken);
+
+        s.heartTimer -= dt;
+        if (s.heartTimer <= 0) {
+          if (s.hearts < 3 || Math.random() < 0.4) {
+            s.floatHearts.push(makeHeart(idCounter.current++, curW));
+          }
+          s.heartTimer = 260 + Math.random() * 220;
+        }
+
+        const invincible = now < s.invincibleUntil;
+        const playerRect = { x: PLAYER_X + 6, y: s.y + 2, w: PLAYER_W - 12, h: PLAYER_H - 4 };
+
+        for (const o of s.obstacles) {
+          const oRect = { x: o.x, y: 0, w: o.w, h: o.h };
+          if (!o.passed && o.x + o.w < PLAYER_X) {
+            o.passed = true;
+            s.progress += 1;
+          }
+          if (!invincible && rectsOverlap(playerRect, oRect)) {
+            s.hearts -= 1;
+            s.invincibleUntil = now + INVINCIBLE_MS;
+            s.hurtFlash = true;
+            setTimeout(() => { if (stateRef.current) stateRef.current.hurtFlash = false; }, 250);
+            if (s.hearts <= 0) {
+              s.hearts = 0;
+              s.running = false;
+              setStatus('gameover');
+            }
+          }
+        }
+
+        for (const h of s.floatHearts) {
+          const hRect = { x: h.x, y: h.y, w: h.w, h: h.h };
+          if (!h.taken && rectsOverlap(playerRect, hRect)) {
+            h.taken = true;
+            if (s.hearts < 3) s.hearts += 1;
+          }
+        }
+
+        if (s.progress >= TOTAL_TO_WIN && s.running) {
+          s.running = false;
+          setStatus('won');
+        }
+      }
+      setTick(t => (t + 1) % 1000000);
+      rafRef.current = requestAnimationFrame(loop);
+    }
+
+    rafRef.current = requestAnimationFrame(loop);
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+      cancelAnimationFrame(rafRef.current);
+    };
+  }, []);
+
+  const restart = useCallback(() => {
+    stateRef.current = freshState();
+    setStatus('playing');
+  }, []);
+
+  const s = stateRef.current;
+  if (!s) return null;
+
+  return React.createElement("div", {
+    onPointerDown: () => s.tryJump && s.tryJump(),
+    style: {
+      position: 'fixed',
+      inset: 0,
+      width: '100vw',
+      height: '100vh',
+      background: 'linear-gradient(180deg,#0B2818 0%, #163C24 55%, #1B4332 100%)',
+      overflow: 'hidden',
+      cursor: 'pointer',
+      userSelect: 'none',
+      touchAction: 'none'
+    }
+  },
+    React.createElement("div", { style: { position: 'absolute', bottom: 0, left: 0, right: 0, height: GROUND_Y, background: 'linear-gradient(180deg,#3A7D44,#245030)', borderTop: '3px solid #95D5B2' } }),
+    React.createElement("div", { style: { position: 'absolute', top: 12, left: 0, right: 0, textAlign: 'center', fontFamily: "'Baloo 2', sans-serif", fontWeight: 800, fontSize: 22, color: '#E9C46A', pointerEvents: 'none' } }, "🌴 MINIMAN vs THE JUNGLE"),
+    React.createElement(HUD, { hearts: s.hearts, progress: s.progress, total: TOTAL_TO_WIN }),
+    React.createElement(MiniMan, { y: s.y, hurt: s.hurtFlash, jumping: s.jumping }),
+    s.obstacles.map(o => o.type === 'plant' ? React.createElement(Plant, { key: o.id, o: o }) : React.createElement(Log, { key: o.id, o: o })),
+    s.floatHearts.map(h => !h.taken && React.createElement(Heart, { key: h.id, h: h })),
+    React.createElement(Overlay, { status: status, onRestart: restart })
+  );
+}
+
+const root = ReactDOM.createRoot(document.getElementById('root'));
+root.render(React.createElement(Game, null));
+</script>
+
+<style>
+@keyframes float {
+  from { transform: translateY(0); }
+  to { transform: translateY(-8px); }
+}
+</style>
+</body>
+</html>
