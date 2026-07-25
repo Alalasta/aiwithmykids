@@ -44,7 +44,7 @@ const PLAYER_X = 110;
 const PLAYER_W = 44;
 const PLAYER_H = 58;
 const GRAVITY = 0.62;
-const JUMP_V = 13.5; // Positive velocity pushes character upward
+const JUMP_V = 13.5;
 const TOTAL_TO_WIN = 16;
 const BASE_SPEED = 5.2;
 const INVINCIBLE_MS = 1200;
@@ -63,8 +63,9 @@ function makeObstacle(idSeed, viewportW) {
   return { id: idSeed, type: 'log', x: viewportW + 40, w: 54, h, passed: false };
 }
 
+// FIX: Reduced Y spawn height range (50-120px) so all hearts are reachable
 function makeHeart(idSeed, viewportW) {
-  return { id: idSeed, x: viewportW + 60 + Math.random() * 120, y: 130 + Math.random() * 100, w: 28, h: 26, taken: false };
+  return { id: idSeed, x: viewportW + 60 + Math.random() * 120, y: 50 + Math.random() * 70, w: 28, h: 26, taken: false };
 }
 
 function MiniMan({ y, hurt, jumping }) {
@@ -117,7 +118,10 @@ function HUD({ hearts, progress, total }) {
 function Overlay({ status, onRestart }) {
   if (status === 'playing') return null;
   const won = status === 'won';
-  return React.createElement("div", { style: { position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 14, background: 'rgba(6,20,12,0.85)', backdropFilter: 'blur(4px)', textAlign: 'center', padding: 20, zIndex: 10 } },
+  return React.createElement("div", { 
+    style: { position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 14, background: 'rgba(6,20,12,0.85)', backdropFilter: 'blur(4px)', textAlign: 'center', padding: 20, zIndex: 10 },
+    onPointerDown: (e) => e.stopPropagation()
+  },
     React.createElement("div", { style: { fontSize: 54 } }, won ? '🏆' : '💀'),
     React.createElement("div", { style: { fontFamily: "'Baloo 2', sans-serif", fontSize: 36, fontWeight: 800, color: won ? '#E9C46A' : '#E07A7A' } }, won ? 'Miniman Conquers the Jungle!' : 'Game Over'),
     React.createElement("button", { onClick: onRestart, style: { marginTop: 12, background: '#E9C46A', color: '#0B2818', border: 'none', fontFamily: "'Baloo 2', sans-serif", fontWeight: 700, fontSize: 20, padding: '12px 32px', borderRadius: 30, cursor: 'pointer' } }, won ? 'Play Again' : 'Try Again')
@@ -150,19 +154,19 @@ function Game() {
     };
   }
 
+  // FIX: Standalone jump function decoupled from state lifecycle
+  const tryJump = useCallback(() => {
+    const s = stateRef.current;
+    if (!s || !s.running) return;
+    if (!s.jumping) {
+      s.vy = JUMP_V;
+      s.jumping = true;
+    }
+  }, []);
+
   useEffect(() => {
     stateRef.current = freshState();
     setStatus('playing');
-
-    function tryJump() {
-      const s = stateRef.current;
-      if (!s || !s.running) return;
-      if (!s.jumping) {
-        s.vy = JUMP_V;
-        s.jumping = true;
-      }
-    }
-    stateRef.current.tryJump = tryJump;
 
     function onKeyDown(e) {
       if (['Space', 'ArrowUp', 'KeyW'].includes(e.code)) {
@@ -183,18 +187,15 @@ function Game() {
       const maxY = curH - GROUND_Y - PLAYER_H - 10;
 
       if (s && s.running) {
-        // Apply physics
         s.vy -= GRAVITY * dt;
         s.y += s.vy * dt;
 
-        // Ground Collision
         if (s.y <= 0) {
           s.y = 0;
           s.vy = 0;
           s.jumping = false;
         }
 
-        // Ceiling Collision
         if (s.y >= maxY) {
           s.y = maxY;
           s.vy = 0;
@@ -266,7 +267,7 @@ function Game() {
       window.removeEventListener('keydown', onKeyDown);
       cancelAnimationFrame(rafRef.current);
     };
-  }, []);
+  }, [tryJump]);
 
   const restart = useCallback(() => {
     stateRef.current = freshState();
@@ -277,7 +278,7 @@ function Game() {
   if (!s) return null;
 
   return React.createElement("div", {
-    onPointerDown: () => s.tryJump && s.tryJump(),
+    onPointerDown: tryJump,
     style: {
       position: 'fixed',
       inset: 0,
