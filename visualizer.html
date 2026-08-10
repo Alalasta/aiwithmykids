@@ -16,6 +16,7 @@
   * { box-sizing: border-box; }
   canvas { display: block; }
   button { font-family: inherit; }
+  input[type="file"] { font-family: inherit; }
 </style>
 </head>
 <body>
@@ -370,6 +371,10 @@ const PALETTES = [{
 }, {
   name: "Rainbow",
   colors: ["#ff1744", "#ff9100", "#ffea00", "#00e676", "#00b0ff", "#651fff", "#f50057"]
+}, {
+  name: "Black & White",
+  colors: ["#000000", "#161616", "#2b2b2b"],
+  bg: "#ffffff"
 }];
 const CONTENT_TYPES = [{
   key: "letters",
@@ -392,6 +397,40 @@ const CONTENT_TYPES = [{
   label: "Shapes",
   emoji: "🔷"
 }];
+const DENSITY_OPTIONS = [{
+  key: "sparse",
+  label: "Sparse",
+  mult: 0.5
+}, {
+  key: "normal",
+  label: "Normal",
+  mult: 1
+}, {
+  key: "busy",
+  label: "Busy",
+  mult: 1.7
+}, {
+  key: "chaotic",
+  label: "Chaotic",
+  mult: 2.6
+}];
+const SPEED_OPTIONS = [{
+  key: "chill",
+  label: "Chill",
+  mult: 0.5
+}, {
+  key: "normal",
+  label: "Normal",
+  mult: 1
+}, {
+  key: "fast",
+  label: "Fast",
+  mult: 1.9
+}, {
+  key: "rave",
+  label: "Rave",
+  mult: 3.2
+}];
 const PATTERNS = ["rain", "orbit", "float", "burst", "wave", "spiral"];
 const LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
 const DIGITS = "0123456789";
@@ -408,6 +447,14 @@ function choice(arr) {
 }
 function clamp(v, lo, hi) {
   return Math.max(lo, Math.min(hi, v));
+}
+function hexToRgba(hex, alpha) {
+  const h = hex.replace("#", "");
+  const bigint = parseInt(h.length === 3 ? h.split("").map(c => c + c).join("") : h, 16);
+  const r = bigint >> 16 & 255,
+    g = bigint >> 8 & 255,
+    b = bigint & 255;
+  return "rgba(" + r + "," + g + "," + b + "," + alpha + ")";
 }
 function randomContent(contentType) {
   if (contentType === "letters") return {
@@ -473,6 +520,7 @@ function makeParticle(pattern, contentType, palette, w, h, centers) {
     content,
     color,
     size,
+    baseSize: size,
     rotation: rand(0, Math.PI * 2),
     rotSpeed: rand(-1.2, 1.2),
     alpha: 1
@@ -529,7 +577,6 @@ function makeParticle(pattern, contentType, palette, w, h, centers) {
       y: c.y
     };
   }
-  // wave -- positions assigned by caller (grid), fill in defaults here
   return {
     ...base,
     x: 0,
@@ -539,7 +586,7 @@ function makeParticle(pattern, contentType, palette, w, h, centers) {
     phase: rand(0, Math.PI * 2)
   };
 }
-function makeConfig(contentType, palette, w, h) {
+function makeConfig(contentType, palette, w, h, densityMult, speedMult) {
   const pattern = choice(PATTERNS);
   const trail = Math.random() < 0.5;
   const centers = Array.from({
@@ -550,7 +597,7 @@ function makeConfig(contentType, palette, w, h) {
   }));
   let particles = [];
   if (pattern === "wave") {
-    const spacing = rand(55, 85);
+    const spacing = clamp(rand(55, 85) / Math.sqrt(densityMult), 26, 120);
     const cols = Math.ceil(w / spacing) + 1;
     const rows = Math.ceil(h / spacing) + 1;
     for (let r = 0; r < rows; r++) {
@@ -564,7 +611,8 @@ function makeConfig(contentType, palette, w, h) {
       }
     }
   } else {
-    const count = pattern === "burst" ? randInt(70, 130) : randInt(60, 120);
+    const base = pattern === "burst" ? randInt(70, 130) : randInt(60, 120);
+    const count = clamp(Math.round(base * densityMult), 10, 500);
     for (let i = 0; i < count; i++) {
       particles.push(makeParticle(pattern, contentType, palette, w, h, centers));
     }
@@ -574,10 +622,13 @@ function makeConfig(contentType, palette, w, h) {
     trail,
     centers,
     particles,
+    bg: palette.bg || "#05050a",
+    speedMultiplier: speedMult,
     waveFreq: rand(0.7, 2.2),
     waveAmp: rand(20, 60),
     wavePhaseFactor: rand(0.006, 0.02),
-    time: 0
+    time: 0,
+    audio: null
   };
 }
 function updateParticle(p, cfg, dt, w, h) {
@@ -625,7 +676,6 @@ function updateParticle(p, cfg, dt, w, h) {
       p.dist = 0;
       p.angle = rand(0, Math.PI * 2);
       p.speed = rand(40, 160);
-      p.color = p.color; // keep color/content but could refresh for variety
     }
   } else if (cfg.pattern === "wave") {
     p.x = p.gridX + Math.sin(cfg.time * cfg.waveFreq + p.gridX * cfg.wavePhaseFactor) * 6;
@@ -633,18 +683,78 @@ function updateParticle(p, cfg, dt, w, h) {
     p.rotation += p.rotSpeed * dt * 0.4;
   }
 }
+
+// Computes smoothed overall/bass/treble energy (0..1 each) from a Uint8Array
+// of frequency-domain data. Pure function so it's testable without a real
+// AudioContext -- callers just need to supply a byte array.
+function computeAudioLevels(dataArray, prevEnergy, prevBass, prevTreble) {
+  const n = dataArray.length;
+  if (n === 0) return {
+    energy: 0,
+    bass: 0,
+    treble: 0
+  };
+  const bassEnd = Math.max(1, Math.floor(n * 0.15));
+  const trebleStart = Math.floor(n * 0.6);
+  let allSum = 0,
+    bassSum = 0,
+    bassCount = 0,
+    trebSum = 0,
+    trebCount = 0;
+  for (let i = 0; i < n; i++) {
+    const v = dataArray[i];
+    allSum += v;
+    if (i < bassEnd) {
+      bassSum += v;
+      bassCount++;
+    }
+    if (i >= trebleStart) {
+      trebSum += v;
+      trebCount++;
+    }
+  }
+  const overall = allSum / n / 255;
+  const bass = bassCount ? bassSum / bassCount / 255 : 0;
+  const treble = trebCount ? trebSum / trebCount / 255 : 0;
+  return {
+    energy: clamp(prevEnergy * 0.7 + overall * 0.3, 0, 1),
+    bass: clamp(prevBass * 0.6 + bass * 0.4, 0, 1),
+    treble: clamp(prevTreble * 0.6 + treble * 0.4, 0, 1)
+  };
+}
 function updateVisual(g, dt) {
-  g.time += dt;
-  g.particles.forEach(p => updateParticle(p, g, dt, g.width, g.height));
+  let speedFactor = g.speedMultiplier || 1;
+  if (g.audio) {
+    try {
+      g.audio.analyser.getByteFrequencyData(g.audio.dataArray);
+      const levels = computeAudioLevels(g.audio.dataArray, g.audio.energy, g.audio.bass, g.audio.treble);
+      g.audio.energy = levels.energy;
+      g.audio.bass = levels.bass;
+      g.audio.treble = levels.treble;
+      speedFactor *= 1 + g.audio.energy * 1.4;
+    } catch (err) {
+      g.audio = null;
+    }
+  }
+  const scaledDt = dt * speedFactor;
+  g.time += scaledDt;
+  g.particles.forEach(p => {
+    updateParticle(p, g, scaledDt, g.width, g.height);
+    if (g.audio) {
+      p.size = p.baseSize * (1 + g.audio.bass * 0.5);
+    } else if (p.size !== p.baseSize) {
+      p.size = p.baseSize;
+    }
+  });
 }
 function drawVisual(ctx, g) {
   const w = g.width,
     h = g.height;
   if (g.trail) {
-    ctx.fillStyle = "rgba(5,5,10,0.14)";
+    ctx.fillStyle = hexToRgba(g.bg, 0.14);
     ctx.fillRect(0, 0, w, h);
   } else {
-    ctx.fillStyle = "#05050a";
+    ctx.fillStyle = g.bg;
     ctx.fillRect(0, 0, w, h);
   }
   g.particles.forEach(p => {
@@ -658,22 +768,44 @@ function drawVisual(ctx, g) {
       ctx.font = "bold " + Math.round(p.size) + "px sans-serif";
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
-      if (p.content.kind === "text") ctx.fillStyle = p.color;else ctx.fillStyle = "#ffffff";
+      ctx.fillStyle = p.content.kind === "text" ? p.color : "#ffffff";
       ctx.fillText(p.content.value, 0, 0);
     }
     ctx.restore();
   });
   ctx.globalAlpha = 1;
 }
+function stopAudio(audio) {
+  if (!audio) return;
+  try {
+    if (audio.el) {
+      audio.el.pause();
+      audio.el.src = "";
+    }
+  } catch (e) {}
+  try {
+    if (audio.stream) audio.stream.getTracks().forEach(t => t.stop());
+  } catch (e) {}
+  try {
+    if (audio.ctx && audio.ctx.state !== "closed") audio.ctx.close();
+  } catch (e) {}
+}
 function Visualizer() {
   const canvasRef = useRef(null);
   const rafRef = useRef(null);
   const gRef = useRef(null);
   const dprRef = useRef(1);
+  const micStreamRef = useRef(null);
   const [screen, setScreen] = useState("setup");
   const [paletteIdx, setPaletteIdx] = useState(0);
   const [contentType, setContentType] = useState("shapes");
+  const [densityKey, setDensityKey] = useState("normal");
+  const [speedKey, setSpeedKey] = useState("normal");
+  const [audioMode, setAudioMode] = useState("none");
+  const [audioFile, setAudioFile] = useState(null);
+  const [audioStatus, setAudioStatus] = useState("");
   const [paused, setPaused] = useState(false);
+  const [showControls, setShowControls] = useState(true);
   const sizeCanvas = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -702,19 +834,113 @@ function Visualizer() {
       window.removeEventListener("orientationchange", sizeCanvas);
     };
   }, [sizeCanvas]);
-  function generate() {
+  useEffect(() => {
+    return () => {
+      if (gRef.current && gRef.current.audio) stopAudio(gRef.current.audio);
+      if (micStreamRef.current) {
+        try {
+          micStreamRef.current.getTracks().forEach(t => t.stop());
+        } catch (e) {}
+      }
+    };
+  }, []);
+  async function enableMicrophone() {
+    setAudioStatus("Requesting microphone access…");
+    try {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        throw new Error("Microphone not supported in this browser");
+      }
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: true
+      });
+      micStreamRef.current = stream;
+      setAudioStatus("Microphone ready ✓");
+    } catch (err) {
+      micStreamRef.current = null;
+      setAudioStatus("Couldn't access microphone — visuals will run without audio.");
+    }
+  }
+  function chooseAudioMode(mode) {
+    setAudioMode(mode);
+    setAudioStatus("");
+    if (mode === "mic") enableMicrophone();
+  }
+  function onFileChosen(e) {
+    const file = e.target.files && e.target.files[0];
+    if (file) {
+      setAudioFile(file);
+      setAudioStatus("Selected: " + file.name);
+    }
+  }
+  async function setupAudio() {
+    try {
+      if (audioMode === "file" && audioFile) {
+        const AC = window.AudioContext || window.webkitAudioContext;
+        if (!AC) return null;
+        const el = new Audio(URL.createObjectURL(audioFile));
+        el.loop = true;
+        const ctx = new AC();
+        const src = ctx.createMediaElementSource(el);
+        const analyser = ctx.createAnalyser();
+        analyser.fftSize = 256;
+        src.connect(analyser);
+        analyser.connect(ctx.destination);
+        try {
+          await el.play();
+        } catch (e) {}
+        return {
+          ctx,
+          analyser,
+          dataArray: new Uint8Array(analyser.frequencyBinCount),
+          energy: 0,
+          bass: 0,
+          treble: 0,
+          el
+        };
+      }
+      if (audioMode === "mic" && micStreamRef.current) {
+        const AC = window.AudioContext || window.webkitAudioContext;
+        if (!AC) return null;
+        const ctx = new AC();
+        const src = ctx.createMediaStreamSource(micStreamRef.current);
+        const analyser = ctx.createAnalyser();
+        analyser.fftSize = 256;
+        src.connect(analyser);
+        return {
+          ctx,
+          analyser,
+          dataArray: new Uint8Array(analyser.frequencyBinCount),
+          energy: 0,
+          bass: 0,
+          treble: 0,
+          stream: micStreamRef.current
+        };
+      }
+    } catch (err) {
+      return null;
+    }
+    return null;
+  }
+  async function generate() {
+    if (gRef.current && gRef.current.audio) stopAudio(gRef.current.audio);
     const w = window.innerWidth,
       h = window.innerHeight;
     const palette = PALETTES[paletteIdx];
-    const cfg = makeConfig(contentType, palette, w, h);
-    gRef.current = {
-      ...cfg,
-      width: w,
-      height: h,
-      lastTime: performance.now()
-    };
+    const densityMult = DENSITY_OPTIONS.find(d => d.key === densityKey).mult;
+    const speedMult = SPEED_OPTIONS.find(s => s.key === speedKey).mult;
+    const cfg = makeConfig(contentType, palette, w, h, densityMult, speedMult);
+    cfg.width = w;
+    cfg.height = h;
+    cfg.lastTime = performance.now();
+    gRef.current = cfg;
     setPaused(false);
     setScreen("running");
+    const audio = await setupAudio();
+    if (gRef.current === cfg) {
+      cfg.audio = audio;
+    } else if (audio) {
+      stopAudio(audio);
+    }
   }
   useEffect(() => {
     if (screen !== "running" || paused) {
@@ -743,6 +969,10 @@ function Visualizer() {
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
     };
   }, [screen, paused]);
+  function exitToSetup() {
+    if (gRef.current && gRef.current.audio) stopAudio(gRef.current.audio);
+    setScreen("setup");
+  }
   return /*#__PURE__*/React.createElement("div", {
     style: {
       position: "fixed",
@@ -750,6 +980,9 @@ function Visualizer() {
       width: "100%",
       height: "100%",
       overflow: "hidden"
+    },
+    onClick: () => {
+      if (screen === "running" && !showControls) setShowControls(true);
     }
   }, /*#__PURE__*/React.createElement("canvas", {
     ref: canvasRef,
@@ -758,173 +991,283 @@ function Visualizer() {
       top: 0,
       left: 0
     }
-  }), screen === "running" && /*#__PURE__*/React.createElement("div", {
-    style: {
-      position: "absolute",
-      bottom: "max(20px, env(safe-area-inset-bottom))",
-      left: "50%",
-      transform: "translateX(-50%)",
-      display: "flex",
-      gap: 10
-    }
+  }), screen === "running" && /*#__PURE__*/React.createElement(React.Fragment, null, showControls && /*#__PURE__*/React.createElement("div", {
+    style: toolbarStyle,
+    onClick: e => e.stopPropagation()
   }, /*#__PURE__*/React.createElement("button", {
     onClick: () => setPaused(p => !p),
-    style: pillBtnStyle
-  }, paused ? "▶ Resume" : "⏸ Pause"), /*#__PURE__*/React.createElement("button", {
-    onClick: () => setScreen("setup"),
-    style: pillBtnStyle
-  }, "✕ New Visual"), /*#__PURE__*/React.createElement("button", {
+    style: toolbarBtnStyle
+  }, paused ? "Resume" : "Pause"), /*#__PURE__*/React.createElement("div", {
+    style: toolbarDividerStyle
+  }), /*#__PURE__*/React.createElement("button", {
     onClick: generate,
-    style: pillBtnStyle
-  }, "🔀 Shuffle")), screen === "setup" && /*#__PURE__*/React.createElement("div", {
-    style: {
-      position: "absolute",
-      inset: 0,
-      display: "flex",
-      flexDirection: "column",
-      alignItems: "center",
-      justifyContent: "center",
-      textAlign: "center",
-      background: "rgba(5,5,10,0.97)",
-      color: "#fff",
-      padding: 24,
-      overflowY: "auto"
-    }
+    style: toolbarBtnStyle
+  }, "Shuffle"), /*#__PURE__*/React.createElement("div", {
+    style: toolbarDividerStyle
+  }), /*#__PURE__*/React.createElement("button", {
+    onClick: exitToSetup,
+    style: toolbarBtnStyle
+  }, "Exit"), /*#__PURE__*/React.createElement("div", {
+    style: toolbarDividerStyle
+  }), /*#__PURE__*/React.createElement("button", {
+    onClick: () => setShowControls(false),
+    style: toolbarBtnStyle
+  }, "Hide")), !showControls && /*#__PURE__*/React.createElement("button", {
+    onClick: e => {
+      e.stopPropagation();
+      setShowControls(true);
+    },
+    style: revealBtnStyle,
+    "aria-label": "Show controls"
+  }, "Show")), screen === "setup" && /*#__PURE__*/React.createElement("div", {
+    style: setupOverlayStyle
+  }, /*#__PURE__*/React.createElement("div", {
+    style: setupCardStyle
   }, /*#__PURE__*/React.createElement("h1", {
     style: {
-      fontSize: 30,
-      margin: "0 0 4px"
+      fontSize: 26,
+      margin: "0 0 4px",
+      fontWeight: 700,
+      letterSpacing: -0.3
     }
-  }, "✨ Visualizer"), /*#__PURE__*/React.createElement("p", {
-    style: {
-      fontSize: 14,
-      opacity: 0.75,
-      marginBottom: 22,
-      maxWidth: 420
-    }
-  }, "Pick a palette and a content type, then generate. Every generation is randomized, so you'll get a different look even with the same picks."), /*#__PURE__*/React.createElement("div", {
-    style: {
-      marginBottom: 22,
-      width: "100%",
-      maxWidth: 480
-    }
-  }, /*#__PURE__*/React.createElement("div", {
+  }, "Visualizer"), /*#__PURE__*/React.createElement("p", {
     style: {
       fontSize: 13,
-      opacity: 0.7,
-      marginBottom: 8
+      opacity: 0.55,
+      marginBottom: 24,
+      maxWidth: 420,
+      lineHeight: 1.5
     }
-  }, "Color Palette"), /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: "flex",
-      flexWrap: "wrap",
-      gap: 10,
-      justifyContent: "center"
-    }
-  }, PALETTES.map((p, i) => /*#__PURE__*/React.createElement("button", {
+  }, "Pick your options and generate — every result is randomized, even with identical settings."), /*#__PURE__*/React.createElement(SectionLabel, null, "Color Palette"), /*#__PURE__*/React.createElement(OptionRow, null, PALETTES.map((p, i) => /*#__PURE__*/React.createElement("button", {
     key: p.name,
     onClick: () => setPaletteIdx(i),
-    style: {
-      ...swatchBtnStyle,
-      border: i === paletteIdx ? "2px solid #fff" : "2px solid transparent"
-    }
+    style: chipSwatchStyle(i === paletteIdx)
   }, /*#__PURE__*/React.createElement("div", {
     style: {
-      display: "flex"
+      display: "flex",
+      background: p.bg || "transparent",
+      padding: 2,
+      borderRadius: 4
     }
   }, p.colors.slice(0, 5).map((c, j) => /*#__PURE__*/React.createElement("div", {
     key: j,
     style: {
-      width: 14,
-      height: 22,
+      width: 12,
+      height: 18,
       background: c
     }
   }))), /*#__PURE__*/React.createElement("div", {
     style: {
       fontSize: 11,
-      marginTop: 4
+      marginTop: 5
     }
-  }, p.name))))), /*#__PURE__*/React.createElement("div", {
-    style: {
-      marginBottom: 26,
-      width: "100%",
-      maxWidth: 480
-    }
-  }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontSize: 13,
-      opacity: 0.7,
-      marginBottom: 8
-    }
-  }, "Content"), /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: "flex",
-      flexWrap: "wrap",
-      gap: 10,
-      justifyContent: "center"
-    }
-  }, CONTENT_TYPES.map(c => /*#__PURE__*/React.createElement("button", {
+  }, p.name)))), /*#__PURE__*/React.createElement(SectionLabel, null, "Content"), /*#__PURE__*/React.createElement(OptionRow, null, CONTENT_TYPES.map(c => /*#__PURE__*/React.createElement("button", {
     key: c.key,
     onClick: () => setContentType(c.key),
-    style: {
-      ...contentBtnStyle,
-      border: c.key === contentType ? "2px solid #fff" : "2px solid transparent"
-    }
+    style: chipStyle(c.key === contentType, 74)
   }, /*#__PURE__*/React.createElement("div", {
     style: {
-      fontSize: 22
+      fontSize: 20
     }
   }, c.emoji), /*#__PURE__*/React.createElement("div", {
     style: {
-      fontSize: 12,
-      marginTop: 2
+      fontSize: 11,
+      marginTop: 3
     }
-  }, c.label))))), /*#__PURE__*/React.createElement("button", {
+  }, c.label)))), /*#__PURE__*/React.createElement(SectionLabel, null, "Density"), /*#__PURE__*/React.createElement(OptionRow, null, DENSITY_OPTIONS.map(d => /*#__PURE__*/React.createElement("button", {
+    key: d.key,
+    onClick: () => setDensityKey(d.key),
+    style: chipPillStyle(d.key === densityKey)
+  }, d.label))), /*#__PURE__*/React.createElement(SectionLabel, null, "Speed"), /*#__PURE__*/React.createElement(OptionRow, null, SPEED_OPTIONS.map(s => /*#__PURE__*/React.createElement("button", {
+    key: s.key,
+    onClick: () => setSpeedKey(s.key),
+    style: chipPillStyle(s.key === speedKey)
+  }, s.label))), /*#__PURE__*/React.createElement(SectionLabel, null, "Audio Reactive (optional)"), /*#__PURE__*/React.createElement(OptionRow, null, /*#__PURE__*/React.createElement("button", {
+    onClick: () => chooseAudioMode("none"),
+    style: chipPillStyle(audioMode === "none")
+  }, "No Audio"), /*#__PURE__*/React.createElement("label", {
+    style: {
+      ...chipPillStyle(audioMode === "file"),
+      cursor: "pointer"
+    }
+  }, "Upload Song", /*#__PURE__*/React.createElement("input", {
+    type: "file",
+    accept: "audio/*",
+    style: {
+      display: "none"
+    },
+    onChange: e => {
+      chooseAudioMode("file");
+      onFileChosen(e);
+    }
+  })), /*#__PURE__*/React.createElement("button", {
+    onClick: () => chooseAudioMode("mic"),
+    style: chipPillStyle(audioMode === "mic")
+  }, "Microphone")), audioStatus && /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 12,
+      opacity: 0.6,
+      marginBottom: 10,
+      maxWidth: 380
+    }
+  }, audioStatus), /*#__PURE__*/React.createElement("button", {
     onClick: generate,
     style: generateBtnStyle
-  }, "Generate ✨")));
+  }, "Generate"))));
 }
-const pillBtnStyle = {
-  fontSize: 14,
-  fontWeight: 700,
-  padding: "10px 18px",
+function SectionLabel({
+  children
+}) {
+  return /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 11,
+      opacity: 0.45,
+      marginBottom: 10,
+      marginTop: 4,
+      textTransform: "uppercase",
+      letterSpacing: 1.2,
+      fontWeight: 600,
+      alignSelf: "flex-start"
+    }
+  }, children);
+}
+function OptionRow({
+  children
+}) {
+  return /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      flexWrap: "wrap",
+      gap: 8,
+      justifyContent: "flex-start",
+      marginBottom: 20,
+      maxWidth: 460,
+      width: "100%"
+    }
+  }, children);
+}
+const setupOverlayStyle = {
+  position: "absolute",
+  inset: 0,
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  padding: 20,
+  overflowY: "auto",
+  background: "rgba(5,6,10,0.75)",
+  backdropFilter: "blur(18px)"
+};
+const setupCardStyle = {
+  display: "flex",
+  flexDirection: "column",
+  alignItems: "flex-start",
+  textAlign: "left",
+  width: "100%",
+  maxWidth: 480,
+  color: "#fff",
+  background: "rgba(20,20,26,0.6)",
+  border: "1px solid rgba(255,255,255,0.08)",
   borderRadius: 24,
+  padding: "28px 26px",
+  boxShadow: "0 20px 60px rgba(0,0,0,0.4)"
+};
+function chipBase(selected) {
+  return {
+    fontSize: 13,
+    fontWeight: 600,
+    cursor: "pointer",
+    border: "1px solid " + (selected ? "transparent" : "rgba(255,255,255,0.1)"),
+    background: selected ? "#ffffff" : "rgba(255,255,255,0.05)",
+    color: selected ? "#0a0a0c" : "rgba(255,255,255,0.85)",
+    transition: "background 0.15s ease, color 0.15s ease"
+  };
+}
+function chipPillStyle(selected) {
+  return {
+    ...chipBase(selected),
+    padding: "9px 16px",
+    borderRadius: 18
+  };
+}
+function chipStyle(selected, minWidth) {
+  return {
+    ...chipBase(selected),
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
+    padding: "10px 14px",
+    borderRadius: 14,
+    minWidth: minWidth || 0
+  };
+}
+function chipSwatchStyle(selected) {
+  return {
+    ...chipBase(selected),
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
+    padding: "7px 9px",
+    borderRadius: 14
+  };
+}
+const toolbarStyle = {
+  position: "absolute",
+  bottom: "max(20px, env(safe-area-inset-bottom))",
+  left: "50%",
+  transform: "translateX(-50%)",
+  display: "flex",
+  alignItems: "center",
+  background: "rgba(20,20,26,0.55)",
+  border: "1px solid rgba(255,255,255,0.1)",
+  borderRadius: 22,
+  padding: 6,
+  backdropFilter: "blur(14px)",
+  boxShadow: "0 8px 30px rgba(0,0,0,0.35)"
+};
+const toolbarBtnStyle = {
+  fontSize: 13,
+  fontWeight: 600,
+  padding: "10px 16px",
+  height: 40,
+  borderRadius: 16,
   border: "none",
-  background: "rgba(255,255,255,0.15)",
+  background: "transparent",
   color: "#fff",
   cursor: "pointer",
-  backdropFilter: "blur(6px)"
+  whiteSpace: "nowrap"
 };
-const swatchBtnStyle = {
-  display: "flex",
-  flexDirection: "column",
-  alignItems: "center",
-  padding: "8px 10px",
-  borderRadius: 12,
-  background: "rgba(255,255,255,0.06)",
-  cursor: "pointer"
+const toolbarDividerStyle = {
+  width: 1,
+  height: 20,
+  background: "rgba(255,255,255,0.12)",
+  margin: "0 2px"
 };
-const contentBtnStyle = {
-  display: "flex",
-  flexDirection: "column",
-  alignItems: "center",
-  padding: "12px 16px",
-  borderRadius: 12,
-  background: "rgba(255,255,255,0.06)",
-  cursor: "pointer",
+const revealBtnStyle = {
+  position: "absolute",
+  bottom: "max(16px, env(safe-area-inset-bottom))",
+  right: 16,
+  padding: "8px 14px",
+  borderRadius: 16,
+  border: "1px solid rgba(255,255,255,0.1)",
+  background: "rgba(20,20,26,0.5)",
   color: "#fff",
-  minWidth: 70
+  fontSize: 12,
+  fontWeight: 600,
+  cursor: "pointer",
+  opacity: 0.6,
+  backdropFilter: "blur(10px)"
 };
 const generateBtnStyle = {
-  fontSize: 18,
-  fontWeight: 800,
-  padding: "14px 36px",
-  borderRadius: 30,
+  fontSize: 15,
+  fontWeight: 700,
+  padding: "13px 28px",
+  borderRadius: 16,
   border: "none",
-  background: "linear-gradient(90deg,#8338ec,#3a86ff)",
-  color: "#fff",
+  background: "#ffffff",
+  color: "#0a0a0c",
   cursor: "pointer",
-  boxShadow: "0 4px 16px rgba(131,56,236,0.5)"
+  marginTop: 4,
+  alignSelf: "stretch"
 };
 try {
   const root = ReactDOM.createRoot(document.getElementById("root"));
