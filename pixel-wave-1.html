@@ -1131,6 +1131,7 @@ function Visualizer() {
   const [kaleidoSegVal, setKaleidoSegVal] = useState(6);
   const [autoVjOn, setAutoVjOn] = useState(false);
   const [autoVjIntervalVal, setAutoVjIntervalVal] = useState(45);
+  const [isFullscreen, setIsFullscreen] = useState(false);
   const sizeCanvas = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -1190,6 +1191,17 @@ function Visualizer() {
     document.addEventListener("visibilitychange", handleVisibility);
     return () => document.removeEventListener("visibilitychange", handleVisibility);
   }, [screen, paused]);
+  useEffect(() => {
+    function handleFsChange() {
+      setIsFullscreen(!!(document.fullscreenElement || document.webkitFullscreenElement));
+    }
+    document.addEventListener("fullscreenchange", handleFsChange);
+    document.addEventListener("webkitfullscreenchange", handleFsChange);
+    return () => {
+      document.removeEventListener("fullscreenchange", handleFsChange);
+      document.removeEventListener("webkitfullscreenchange", handleFsChange);
+    };
+  }, []);
   async function enableMicrophone() {
     setAudioStatus("Requesting microphone access…");
     try {
@@ -1490,7 +1502,6 @@ function Visualizer() {
     gRef.current = cfg;
     setPaused(false);
     setScreen("running");
-    enterFullscreen();
     requestWakeLock();
     const audio = await setupAudio();
     if (gRef.current === cfg) {
@@ -1599,6 +1610,14 @@ function Visualizer() {
       color: showMixer ? "#7ee0ff" : "#fff"
     }
   }, "Mixer"), /*#__PURE__*/React.createElement("div", {
+    style: toolbarDividerStyle
+  }), /*#__PURE__*/React.createElement("button", {
+    onClick: () => isFullscreen ? exitFullscreen() : enterFullscreen(),
+    style: {
+      ...toolbarBtnStyle,
+      color: isFullscreen ? "#7ee0ff" : "#fff"
+    }
+  }, isFullscreen ? "⤢ Exit FS" : "⛶ Fullscreen"), /*#__PURE__*/React.createElement("div", {
     style: toolbarDividerStyle
   }), /*#__PURE__*/React.createElement("button", {
     onClick: () => isRecording ? stopRecording() : startRecording(),
