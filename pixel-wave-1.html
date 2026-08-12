@@ -756,7 +756,13 @@ function makeConfig(contentType, palette, w, h, densityMult, speedMult, customTe
     wavePhaseFactor: rand(0.006, 0.02),
     time: 0,
     audio: null,
-    beatPulse: 0
+    beatPulse: 0,
+    mixSpeed: 1,
+    mixBeatBoost: 1,
+    mixGlow: 1,
+    trailOverride: null,
+    kaleido: false,
+    kaleidoSegments: 6
   };
 }
 function updateParticle(p, cfg, dt, w, h) {
@@ -940,13 +946,13 @@ function updateVisual(g, dt, nowMs) {
     speedFactor *= 1 + g.beatPulse * 0.3;
   }
   g.beatPulse = Math.max(0, (g.beatPulse || 0) - dt * 2.4);
-  const scaledDt = dt * speedFactor;
+  const scaledDt = dt * speedFactor * (g.mixSpeed || 1);
   g.time += scaledDt;
   const bassBoost = g.audio ? g.audio.bass * 0.5 : 0;
-  const trebleGlow = g.audio ? g.audio.treble : 0;
+  const trebleGlow = (g.audio ? g.audio.treble : 0) * (g.mixGlow || 1);
   g.particles.forEach(p => {
     updateParticle(p, g, scaledDt, g.width, g.height);
-    const beatBoost = g.beatPulse * 0.55;
+    const beatBoost = g.beatPulse * 0.55 * (g.mixBeatBoost || 1);
     if (bassBoost || beatBoost) {
       p.size = p.baseSize * (1 + bassBoost + beatBoost);
     } else if (p.size !== p.baseSize) {
@@ -958,15 +964,16 @@ function updateVisual(g, dt, nowMs) {
 function drawVisual(ctx, g) {
   const w = g.width,
     h = g.height;
+  const trailActive = g.trailOverride == null ? g.trail : g.trailOverride;
   if (g.audio && g.audio.camMode && g.audio.videoEl && g.audio.videoEl.readyState >= 2) {
     ctx.save();
     ctx.translate(w, 0);
     ctx.scale(-1, 1);
     ctx.drawImage(g.audio.videoEl, 0, 0, w, h);
     ctx.restore();
-    ctx.fillStyle = hexToRgba(g.bg, g.trail ? 0.25 : 0.55);
+    ctx.fillStyle = hexToRgba(g.bg, trailActive ? 0.25 : 0.55);
     ctx.fillRect(0, 0, w, h);
-  } else if (g.trail) {
+  } else if (trailActive) {
     ctx.fillStyle = hexToRgba(g.bg, 0.14);
     ctx.fillRect(0, 0, w, h);
   } else {
@@ -1022,9 +1029,37 @@ function drawVisual(ctx, g) {
   });
   ctx.globalAlpha = 1;
   if (g.beatPulse > 0.04) {
-    ctx.fillStyle = "rgba(255,255,255," + Math.min(0.16, g.beatPulse * 0.16) + ")";
+    const flashAlpha = clamp(g.beatPulse * 0.16 * (g.mixBeatBoost || 1), 0, 0.4);
+    ctx.fillStyle = "rgba(255,255,255," + flashAlpha + ")";
     ctx.fillRect(0, 0, w, h);
   }
+}
+// Radial mirror kaleidoscope post-process: takes a fully-rendered frame
+// (the buffer canvas) and tiles a rotated, alternately-mirrored copy of it
+// into N pie-slice wedges around the center. Works on top of whatever
+// content mode is running, logo particles included, since it only touches
+// pixels, not the particle system itself.
+function drawKaleidoscope(ctx, source, w, h, segments) {
+  const cx = w / 2,
+    cy = h / 2;
+  const radius = Math.sqrt(cx * cx + cy * cy) + 4;
+  const angleStep = Math.PI * 2 / segments;
+  ctx.save();
+  ctx.clearRect(0, 0, w, h);
+  ctx.translate(cx, cy);
+  for (let i = 0; i < segments; i++) {
+    ctx.save();
+    ctx.rotate(i * angleStep);
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.arc(0, 0, radius, -angleStep / 2 - 0.01, angleStep / 2 + 0.01);
+    ctx.closePath();
+    ctx.clip();
+    if (i % 2 === 1) ctx.scale(1, -1);
+    ctx.drawImage(source, -cx, -cy, w, h);
+    ctx.restore();
+  }
+  ctx.restore();
 }
 function stopAudio(audio) {
   if (!audio) return;
@@ -1041,8 +1076,23 @@ function stopAudio(audio) {
     if (audio.ctx && audio.ctx.state !== "closed") audio.ctx.close();
   } catch (e) {}
 }
+// Recolors a running visual in place, no regeneration needed. Lets the
+// mixer swap palettes live while the show keeps running.
+function applyLivePalette(g, palette) {
+  if (!g || !palette) return;
+  g.bg = palette.bg || "#05050a";
+  g.particles.forEach(p => {
+    p.color = choice(palette.colors);
+  });
+  if (g.ribbons) {
+    g.ribbons.forEach(rb => {
+      rb.color = choice(palette.colors);
+    });
+  }
+}
 function Visualizer() {
   const canvasRef = useRef(null);
+  const bufferCanvasRef = useRef(null);
   const rafRef = useRef(null);
   const gRef = useRef(null);
   const dprRef = useRef(1);
@@ -1072,6 +1122,15 @@ function Visualizer() {
   const [showControls, setShowControls] = useState(true);
   const [isRecording, setIsRecording] = useState(false);
   const [recordStatus, setRecordStatus] = useState("");
+  const [showMixer, setShowMixer] = useState(false);
+  const [mixSpeedVal, setMixSpeedVal] = useState(1);
+  const [mixBeatVal, setMixBeatVal] = useState(1);
+  const [mixGlowVal, setMixGlowVal] = useState(1);
+  const [trailOverrideVal, setTrailOverrideVal] = useState("auto");
+  const [kaleidoOn, setKaleidoOn] = useState(false);
+  const [kaleidoSegVal, setKaleidoSegVal] = useState(6);
+  const [autoVjOn, setAutoVjOn] = useState(false);
+  const [autoVjIntervalVal, setAutoVjIntervalVal] = useState(45);
   const sizeCanvas = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -1086,6 +1145,12 @@ function Visualizer() {
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    if (!bufferCanvasRef.current) bufferCanvasRef.current = document.createElement("canvas");
+    const buf = bufferCanvasRef.current;
+    buf.width = Math.floor(w * dpr);
+    buf.height = Math.floor(h * dpr);
+    const bctx = buf.getContext("2d");
+    if (bctx) bctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     if (gRef.current) {
       gRef.current.width = w;
       gRef.current.height = h;
@@ -1162,6 +1227,38 @@ function Visualizer() {
       setLogoStatus("Couldn't load that image");
     };
     img.src = url;
+  }
+  function setMixSpeed(v) {
+    setMixSpeedVal(v);
+    if (gRef.current) gRef.current.mixSpeed = v;
+  }
+  function setMixBeat(v) {
+    setMixBeatVal(v);
+    if (gRef.current) gRef.current.mixBeatBoost = v;
+  }
+  function setMixGlow(v) {
+    setMixGlowVal(v);
+    if (gRef.current) gRef.current.mixGlow = v;
+  }
+  function setTrailMode(mode) {
+    setTrailOverrideVal(mode);
+    if (gRef.current) gRef.current.trailOverride = mode === "auto" ? null : mode === "on";
+  }
+  function livePalette(i) {
+    setPaletteIdx(i);
+    if (gRef.current) applyLivePalette(gRef.current, PALETTES[i]);
+  }
+  function setKaleido(on) {
+    setKaleidoOn(on);
+    if (gRef.current) gRef.current.kaleido = on;
+  }
+  function setKaleidoSeg(v) {
+    const seg = Math.round(v);
+    setKaleidoSegVal(seg);
+    if (gRef.current) gRef.current.kaleidoSegments = seg;
+  }
+  function triggerFlash() {
+    if (gRef.current) gRef.current.beatPulse = 1;
   }
   async function enableCamera() {
     setAudioStatus("Requesting camera access…");
@@ -1384,6 +1481,12 @@ function Visualizer() {
     cfg.height = h;
     cfg.lastTime = performance.now();
     if (audioMode === "tap" && bpm) cfg.manualBpm = bpm;
+    cfg.mixSpeed = mixSpeedVal;
+    cfg.mixBeatBoost = mixBeatVal;
+    cfg.mixGlow = mixGlowVal;
+    cfg.trailOverride = trailOverrideVal === "auto" ? null : trailOverrideVal === "on";
+    cfg.kaleido = kaleidoOn;
+    cfg.kaleidoSegments = kaleidoSegVal;
     gRef.current = cfg;
     setPaused(false);
     setScreen("running");
@@ -1414,7 +1517,17 @@ function Visualizer() {
       const canvas = canvasRef.current;
       if (canvas) {
         const ctx = canvas.getContext("2d");
-        if (ctx) drawVisual(ctx, g);
+        if (ctx) {
+          if (g.kaleido && bufferCanvasRef.current) {
+            const bctx = bufferCanvasRef.current.getContext("2d");
+            if (bctx) {
+              drawVisual(bctx, g);
+              drawKaleidoscope(ctx, bufferCanvasRef.current, g.width, g.height, g.kaleidoSegments || 6);
+            }
+          } else {
+            drawVisual(ctx, g);
+          }
+        }
       }
       rafRef.current = requestAnimationFrame(loop);
     }
@@ -1423,6 +1536,13 @@ function Visualizer() {
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
     };
   }, [screen, paused]);
+  useEffect(() => {
+    if (!autoVjOn || screen !== "running" || paused) return;
+    const id = setInterval(() => {
+      generate();
+    }, autoVjIntervalVal * 1000);
+    return () => clearInterval(id);
+  }, [autoVjOn, autoVjIntervalVal, screen, paused]);
   function exitToSetup() {
     if (isRecording) stopRecording();
     if (gRef.current && gRef.current.audio) stopAudio(gRef.current.audio);
@@ -1473,6 +1593,14 @@ function Visualizer() {
   }, "Shuffle"), /*#__PURE__*/React.createElement("div", {
     style: toolbarDividerStyle
   }), /*#__PURE__*/React.createElement("button", {
+    onClick: () => setShowMixer(m => !m),
+    style: {
+      ...toolbarBtnStyle,
+      color: showMixer ? "#7ee0ff" : "#fff"
+    }
+  }, "Mixer"), /*#__PURE__*/React.createElement("div", {
+    style: toolbarDividerStyle
+  }), /*#__PURE__*/React.createElement("button", {
     onClick: () => isRecording ? stopRecording() : startRecording(),
     style: {
       ...toolbarBtnStyle,
@@ -1488,7 +1616,103 @@ function Visualizer() {
   }), /*#__PURE__*/React.createElement("button", {
     onClick: () => setShowControls(false),
     style: toolbarBtnStyle
-  }, "Hide")), recordStatus && /*#__PURE__*/React.createElement("div", {
+  }, "Hide")), showMixer && /*#__PURE__*/React.createElement("div", {
+    style: mixerPanelStyle,
+    onClick: e => e.stopPropagation()
+  }, /*#__PURE__*/React.createElement(MixerSlider, {
+    label: "Speed",
+    min: 0.3,
+    max: 2.5,
+    value: mixSpeedVal,
+    onChange: setMixSpeed
+  }), /*#__PURE__*/React.createElement(MixerSlider, {
+    label: "Beat Punch",
+    min: 0,
+    max: 2,
+    value: mixBeatVal,
+    onChange: setMixBeat
+  }), /*#__PURE__*/React.createElement(MixerSlider, {
+    label: "Glow",
+    min: 0,
+    max: 2,
+    value: mixGlowVal,
+    onChange: setMixGlow
+  }), /*#__PURE__*/React.createElement("div", {
+    style: mixerRowStyle
+  }, /*#__PURE__*/React.createElement("span", {
+    style: mixerLabelStyle
+  }, "Trail"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: 6
+    }
+  }, ["auto", "on", "off"].map(mode => /*#__PURE__*/React.createElement("button", {
+    key: mode,
+    onClick: () => setTrailMode(mode),
+    style: mixerTinyBtnStyle(trailOverrideVal === mode)
+  }, mode))), /*#__PURE__*/React.createElement("button", {
+    onClick: triggerFlash,
+    style: mixerFlashBtnStyle
+  }, "⚡ Flash")), /*#__PURE__*/React.createElement("div", {
+    style: mixerRowStyle
+  }, /*#__PURE__*/React.createElement("span", {
+    style: mixerLabelStyle
+  }, "Kaleido"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: 6
+    }
+  }, /*#__PURE__*/React.createElement("button", {
+    onClick: () => setKaleido(!kaleidoOn),
+    style: mixerTinyBtnStyle(kaleidoOn)
+  }, kaleidoOn ? "on" : "off")), kaleidoOn && /*#__PURE__*/React.createElement("input", {
+    type: "range",
+    min: 3,
+    max: 16,
+    step: 1,
+    value: kaleidoSegVal,
+    onChange: e => setKaleidoSeg(parseFloat(e.target.value)),
+    style: mixerSliderStyle
+  }), kaleidoOn && /*#__PURE__*/React.createElement("span", {
+    style: mixerValueStyle
+  }, kaleidoSegVal)), /*#__PURE__*/React.createElement("div", {
+    style: mixerRowStyle
+  }, /*#__PURE__*/React.createElement("span", {
+    style: mixerLabelStyle
+  }, "Auto-VJ"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: 6
+    }
+  }, /*#__PURE__*/React.createElement("button", {
+    onClick: () => setAutoVjOn(v => !v),
+    style: mixerTinyBtnStyle(autoVjOn)
+  }, autoVjOn ? "on" : "off")), autoVjOn && /*#__PURE__*/React.createElement("input", {
+    type: "range",
+    min: 15,
+    max: 120,
+    step: 5,
+    value: autoVjIntervalVal,
+    onChange: e => setAutoVjIntervalVal(parseFloat(e.target.value)),
+    style: mixerSliderStyle
+  }), autoVjOn && /*#__PURE__*/React.createElement("span", {
+    style: mixerValueStyle
+  }, autoVjIntervalVal + "s")), /*#__PURE__*/React.createElement("div", {
+    style: mixerRowStyle
+  }, /*#__PURE__*/React.createElement("span", {
+    style: mixerLabelStyle
+  }, "Palette"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: 6,
+      flexWrap: "wrap"
+    }
+  }, PALETTES.map((p, i) => /*#__PURE__*/React.createElement("button", {
+    key: p.name,
+    onClick: () => livePalette(i),
+    title: p.name,
+    style: mixerSwatchStyle(i === paletteIdx, p)
+  }))))), recordStatus && /*#__PURE__*/React.createElement("div", {
     style: recordStatusStyle
   }, recordStatus), !showControls && /*#__PURE__*/React.createElement("button", {
     onClick: e => {
@@ -1673,6 +1897,29 @@ function SectionLabel({
     }
   }, children);
 }
+function MixerSlider({
+  label,
+  min,
+  max,
+  value,
+  onChange
+}) {
+  return /*#__PURE__*/React.createElement("div", {
+    style: mixerRowStyle
+  }, /*#__PURE__*/React.createElement("span", {
+    style: mixerLabelStyle
+  }, label), /*#__PURE__*/React.createElement("input", {
+    type: "range",
+    min,
+    max,
+    step: 0.1,
+    value,
+    onChange: e => onChange(parseFloat(e.target.value)),
+    style: mixerSliderStyle
+  }), /*#__PURE__*/React.createElement("span", {
+    style: mixerValueStyle
+  }, value.toFixed(1) + "x"));
+}
 function OptionRow({
   children
 }) {
@@ -1824,6 +2071,85 @@ const revealBtnStyle = {
   opacity: 0.6,
   backdropFilter: "blur(10px)"
 };
+const mixerPanelStyle = {
+  position: "absolute",
+  bottom: "max(84px, calc(env(safe-area-inset-bottom) + 84px))",
+  left: "50%",
+  transform: "translateX(-50%)",
+  width: "min(92vw, 380px)",
+  display: "flex",
+  flexDirection: "column",
+  gap: 12,
+  background: "rgba(16,16,22,0.72)",
+  border: "1px solid rgba(255,255,255,0.1)",
+  borderRadius: 20,
+  padding: "16px 18px",
+  backdropFilter: "blur(16px)",
+  boxShadow: "0 8px 30px rgba(0,0,0,0.4)",
+  color: "#fff"
+};
+const mixerRowStyle = {
+  display: "flex",
+  alignItems: "center",
+  gap: 10
+};
+const mixerLabelStyle = {
+  fontSize: 12,
+  fontWeight: 600,
+  opacity: 0.75,
+  width: 78,
+  flexShrink: 0,
+  color: "#fff"
+};
+const mixerValueStyle = {
+  fontSize: 11,
+  opacity: 0.55,
+  width: 34,
+  textAlign: "right",
+  flexShrink: 0,
+  color: "#fff"
+};
+const mixerSliderStyle = {
+  flex: 1,
+  accentColor: "#7ee0ff",
+  height: 4
+};
+function mixerTinyBtnStyle(active) {
+  return {
+    fontSize: 11,
+    fontWeight: 600,
+    padding: "6px 10px",
+    borderRadius: 10,
+    border: "1px solid " + (active ? "rgba(126,224,255,0.5)" : "rgba(255,255,255,0.12)"),
+    background: active ? "rgba(126,224,255,0.15)" : "rgba(255,255,255,0.05)",
+    color: "#fff",
+    cursor: "pointer",
+    textTransform: "capitalize"
+  };
+}
+const mixerFlashBtnStyle = {
+  marginLeft: "auto",
+  fontSize: 11,
+  fontWeight: 700,
+  padding: "6px 12px",
+  borderRadius: 10,
+  border: "1px solid rgba(255,255,255,0.14)",
+  background: "rgba(255,255,255,0.08)",
+  color: "#fff",
+  cursor: "pointer",
+  whiteSpace: "nowrap"
+};
+function mixerSwatchStyle(selected, palette) {
+  return {
+    width: 26,
+    height: 20,
+    borderRadius: 6,
+    border: selected ? "2px solid #7ee0ff" : "1px solid rgba(255,255,255,0.15)",
+    background: "linear-gradient(90deg, " + palette.colors.slice(0, 3).join(",") + ")",
+    cursor: "pointer",
+    padding: 0
+  };
+}
 const customTextInputStyle = {
   width: "100%",
   maxWidth: 460,
