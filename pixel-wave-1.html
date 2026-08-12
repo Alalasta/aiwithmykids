@@ -391,7 +391,7 @@ const CONTENT_TYPES = [{
   emoji: "🔣"
 }, {
   key: "emoji",
-  label: "Emojis",
+  label: "Symbols",
   emoji: "🎉"
 }, {
   key: "shapes",
@@ -407,8 +407,12 @@ const CONTENT_TYPES = [{
   emoji: "🎧"
 }, {
   key: "logo",
-  label: "Your Logo",
+  label: "Image",
   emoji: "🖼️"
+}, {
+  key: "draw",
+  label: "Draw",
+  emoji: "🖊️"
 }];
 const DENSITY_OPTIONS = [{
   key: "sparse",
@@ -447,7 +451,7 @@ const SPEED_OPTIONS = [{
 const PATTERNS = ["rain", "orbit", "float", "burst", "wave", "spiral", "matrix", "ribbon"];
 const LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
 const DIGITS = "0123456789";
-const EMOJI_POOL = ["✨", "🎈", "🌟", "💥", "🔥", "💫", "🌈", "🎊", "⭐", "🍀", "🌸", "💎", "🎵", "🦋", "🌀", "☀️", "🌙", "⚡", "🎆", "🍬"];
+const EMOJI_POOL = ["✦", "✧", "✩", "✪", "✫", "✬", "✭", "✮", "✯", "✰", "★", "☆", "●", "○", "◆", "◇", "▲", "△", "▼", "▽", "✕", "✚", "❖", "❋"];
 const SHAPE_TYPES = ["circle", "square", "triangle", "star", "hexagon"];
 const ICON_TYPES = ["note", "headphones", "waveform", "disco", "speaker"];
 function rand(min, max) {
@@ -495,7 +499,7 @@ function randomContent(contentType, customPool) {
     kind: "icon",
     value: choice(ICON_TYPES)
   };
-  if (contentType === "logo") return {
+  if (contentType === "logo" || contentType === "draw") return {
     kind: "logo",
     value: null
   };
@@ -599,7 +603,7 @@ function drawIcon(ctx, type, size, color) {
 function makeParticle(pattern, contentType, palette, w, h, centers, customPool) {
   const content = randomContent(contentType, customPool);
   const color = choice(palette.colors);
-  const size = contentType === "logo" ? rand(34, 64) : rand(18, 42);
+  const size = contentType === "logo" || contentType === "draw" ? rand(34, 64) : rand(18, 42);
   const base = {
     content,
     color,
@@ -1004,7 +1008,7 @@ function drawVisual(ctx, g) {
     ctx.translate(p.x, p.y);
     ctx.rotate(p.rotation);
     if (p.glow) {
-      ctx.shadowColor = p.content.kind === "shape" ? p.color : "#ffffff";
+      ctx.shadowColor = p.content.kind === "logo" ? "#ffffff" : p.color;
       ctx.shadowBlur = p.glow * 22;
     }
     if (p.content.kind === "shape") {
@@ -1023,7 +1027,7 @@ function drawVisual(ctx, g) {
       ctx.font = "bold " + Math.round(p.size) + "px sans-serif";
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
-      ctx.fillStyle = p.content.kind === "text" ? p.color : "#ffffff";
+      ctx.fillStyle = p.color;
       ctx.fillText(p.content.value, 0, 0);
     }
     ctx.restore();
@@ -1102,6 +1106,10 @@ function Visualizer() {
   const camVideoRef = useRef(null);
   const logoImageRef = useRef(null);
   const logoAspectRef = useRef(1);
+  const drawCanvasRef = useRef(null);
+  const drawSnapshotRef = useRef(null);
+  const isDrawingRef = useRef(false);
+  const lastPointRef = useRef(null);
   const wakeLockRef = useRef(null);
   const tapTimesRef = useRef([]);
   const recorderRef = useRef(null);
@@ -1240,6 +1248,46 @@ function Visualizer() {
       setLogoStatus("Couldn't load that image");
     };
     img.src = url;
+  }
+  function getCanvasPoint(e, canvas) {
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    return {
+      x: (e.clientX - rect.left) * scaleX,
+      y: (e.clientY - rect.top) * scaleY
+    };
+  }
+  function handleDrawStart(e) {
+    const canvas = drawCanvasRef.current;
+    if (!canvas) return;
+    canvas.setPointerCapture(e.pointerId);
+    isDrawingRef.current = true;
+    lastPointRef.current = getCanvasPoint(e, canvas);
+  }
+  function handleDrawMove(e) {
+    if (!isDrawingRef.current) return;
+    const canvas = drawCanvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    const pt = getCanvasPoint(e, canvas);
+    ctx.strokeStyle = "#ffffff";
+    ctx.lineWidth = 8;
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    ctx.beginPath();
+    ctx.moveTo(lastPointRef.current.x, lastPointRef.current.y);
+    ctx.lineTo(pt.x, pt.y);
+    ctx.stroke();
+    lastPointRef.current = pt;
+  }
+  function handleDrawEnd() {
+    isDrawingRef.current = false;
+  }
+  function clearDrawing() {
+    const canvas = drawCanvasRef.current;
+    if (!canvas) return;
+    canvas.getContext("2d").clearRect(0, 0, canvas.width, canvas.height);
   }
   function setMixSpeed(v) {
     setMixSpeedVal(v);
@@ -1489,7 +1537,21 @@ function Visualizer() {
     const palette = PALETTES[paletteIdx];
     const densityMult = DENSITY_OPTIONS.find(d => d.key === densityKey).mult;
     const speedMult = SPEED_OPTIONS.find(s => s.key === speedKey).mult;
-    const cfg = makeConfig(contentType, palette, w, h, densityMult, speedMult, customText, logoImageRef.current, logoAspectRef.current);
+    const drawCanvas = drawCanvasRef.current;
+    if (contentType === "draw" && drawCanvas) {
+      // The sketch pad only exists while the setup screen is mounted, so we
+      // snapshot it into a persistent offscreen canvas here. Later Shuffles
+      // (fired while the setup screen is gone) reuse this snapshot instead
+      // of a now-missing DOM canvas.
+      if (!drawSnapshotRef.current) drawSnapshotRef.current = document.createElement("canvas");
+      const snap = drawSnapshotRef.current;
+      snap.width = drawCanvas.width;
+      snap.height = drawCanvas.height;
+      snap.getContext("2d").drawImage(drawCanvas, 0, 0);
+    }
+    const imageSource = contentType === "draw" ? drawSnapshotRef.current : logoImageRef.current;
+    const imageAspect = contentType === "draw" ? drawSnapshotRef.current ? drawSnapshotRef.current.height / drawSnapshotRef.current.width : 1 : logoAspectRef.current;
+    const cfg = makeConfig(contentType, palette, w, h, densityMult, speedMult, customText, imageSource, imageAspect);
     cfg.width = w;
     cfg.height = h;
     cfg.lastTime = performance.now();
@@ -1837,7 +1899,29 @@ function Visualizer() {
       opacity: 0.6,
       marginTop: 6
     }
-  }, logoStatus)), /*#__PURE__*/React.createElement(SectionLabel, null, "Density"), /*#__PURE__*/React.createElement(OptionRow, null, DENSITY_OPTIONS.map(d => /*#__PURE__*/React.createElement("button", {
+  }, logoStatus)), contentType === "draw" && /*#__PURE__*/React.createElement("div", {
+    style: {
+      width: "100%",
+      maxWidth: 260,
+      marginBottom: 20,
+      display: "flex",
+      flexDirection: "column",
+      alignItems: "flex-start",
+      gap: 10
+    }
+  }, /*#__PURE__*/React.createElement("canvas", {
+    ref: drawCanvasRef,
+    width: 260,
+    height: 260,
+    onPointerDown: handleDrawStart,
+    onPointerMove: handleDrawMove,
+    onPointerUp: handleDrawEnd,
+    onPointerLeave: handleDrawEnd,
+    style: drawCanvasStyle
+  }), /*#__PURE__*/React.createElement("button", {
+    onClick: clearDrawing,
+    style: tapBtnStyle
+  }, "Clear")), /*#__PURE__*/React.createElement(SectionLabel, null, "Density"), /*#__PURE__*/React.createElement(OptionRow, null, DENSITY_OPTIONS.map(d => /*#__PURE__*/React.createElement("button", {
     key: d.key,
     onClick: () => setDensityKey(d.key),
     style: chipPillStyle(d.key === densityKey)
@@ -2198,6 +2282,15 @@ const customTextInputStyle = {
   fontSize: 14,
   marginBottom: 20,
   outline: "none"
+};
+const drawCanvasStyle = {
+  width: 260,
+  height: 260,
+  borderRadius: 3,
+  border: "1px solid rgba(255,255,255,0.18)",
+  background: "rgba(255,255,255,0.03)",
+  touchAction: "none",
+  cursor: "crosshair"
 };
 const tapBtnStyle = {
   fontSize: 12,
