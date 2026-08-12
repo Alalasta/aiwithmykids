@@ -17,6 +17,7 @@
   canvas { display: block; }
   button { font-family: inherit; }
   input[type="file"] { font-family: inherit; }
+  .pw-toolbar::-webkit-scrollbar { display: none; }
 </style>
 </head>
 <body>
@@ -1591,6 +1592,7 @@ function Visualizer() {
       pointerEvents: "none"
     }
   }), screen === "running" && /*#__PURE__*/React.createElement(React.Fragment, null, showControls && /*#__PURE__*/React.createElement("div", {
+    className: "pw-toolbar",
     style: toolbarStyle,
     onClick: e => e.stopPropagation()
   }, /*#__PURE__*/React.createElement("button", {
@@ -2041,7 +2043,11 @@ const toolbarStyle = {
   borderRadius: 22,
   padding: 6,
   backdropFilter: "blur(14px)",
-  boxShadow: "0 8px 30px rgba(0,0,0,0.35)"
+  boxShadow: "0 8px 30px rgba(0,0,0,0.35)",
+  maxWidth: "calc(100vw - 20px)",
+  overflowX: "auto",
+  WebkitOverflowScrolling: "touch",
+  scrollbarWidth: "none"
 };
 const toolbarBtnStyle = {
   fontSize: 13,
@@ -2053,13 +2059,15 @@ const toolbarBtnStyle = {
   background: "transparent",
   color: "#fff",
   cursor: "pointer",
-  whiteSpace: "nowrap"
+  whiteSpace: "nowrap",
+  flexShrink: 0
 };
 const toolbarDividerStyle = {
   width: 1,
   height: 20,
   background: "rgba(255,255,255,0.12)",
-  margin: "0 2px"
+  margin: "0 2px",
+  flexShrink: 0
 };
 const recordStatusStyle = {
   position: "absolute",
