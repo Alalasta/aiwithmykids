@@ -1108,6 +1108,7 @@ function Visualizer() {
   const logoAspectRef = useRef(1);
   const drawCanvasRef = useRef(null);
   const drawSnapshotRef = useRef(null);
+  const drawUndoStackRef = useRef([]);
   const isDrawingRef = useRef(false);
   const lastPointRef = useRef(null);
   const wakeLockRef = useRef(null);
@@ -1175,6 +1176,9 @@ function Visualizer() {
       window.removeEventListener("orientationchange", sizeCanvas);
     };
   }, [sizeCanvas]);
+  useEffect(() => {
+    if (contentType === "draw") drawUndoStackRef.current = [];
+  }, [contentType]);
   useEffect(() => {
     return () => {
       if (gRef.current && gRef.current.audio) stopAudio(gRef.current.audio);
@@ -1258,10 +1262,19 @@ function Visualizer() {
       y: (e.clientY - rect.top) * scaleY
     };
   }
+  function pushDrawUndoSnapshot() {
+    const canvas = drawCanvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    const snapshot = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    drawUndoStackRef.current.push(snapshot);
+    if (drawUndoStackRef.current.length > 30) drawUndoStackRef.current.shift();
+  }
   function handleDrawStart(e) {
     const canvas = drawCanvasRef.current;
     if (!canvas) return;
     canvas.setPointerCapture(e.pointerId);
+    pushDrawUndoSnapshot();
     isDrawingRef.current = true;
     lastPointRef.current = getCanvasPoint(e, canvas);
   }
@@ -1284,9 +1297,17 @@ function Visualizer() {
   function handleDrawEnd() {
     isDrawingRef.current = false;
   }
+  function undoDrawing() {
+    const canvas = drawCanvasRef.current;
+    if (!canvas) return;
+    const last = drawUndoStackRef.current.pop();
+    if (!last) return;
+    canvas.getContext("2d").putImageData(last, 0, 0);
+  }
   function clearDrawing() {
     const canvas = drawCanvasRef.current;
     if (!canvas) return;
+    pushDrawUndoSnapshot();
     canvas.getContext("2d").clearRect(0, 0, canvas.width, canvas.height);
   }
   function setMixSpeed(v) {
@@ -1918,10 +1939,18 @@ function Visualizer() {
     onPointerUp: handleDrawEnd,
     onPointerLeave: handleDrawEnd,
     style: drawCanvasStyle
-  }), /*#__PURE__*/React.createElement("button", {
+  }), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: 10
+    }
+  }, /*#__PURE__*/React.createElement("button", {
+    onClick: undoDrawing,
+    style: tapBtnStyle
+  }, "Undo"), /*#__PURE__*/React.createElement("button", {
     onClick: clearDrawing,
     style: tapBtnStyle
-  }, "Clear")), /*#__PURE__*/React.createElement(SectionLabel, null, "Density"), /*#__PURE__*/React.createElement(OptionRow, null, DENSITY_OPTIONS.map(d => /*#__PURE__*/React.createElement("button", {
+  }, "Clear"))), /*#__PURE__*/React.createElement(SectionLabel, null, "Density"), /*#__PURE__*/React.createElement(OptionRow, null, DENSITY_OPTIONS.map(d => /*#__PURE__*/React.createElement("button", {
     key: d.key,
     onClick: () => setDensityKey(d.key),
     style: chipPillStyle(d.key === densityKey)
