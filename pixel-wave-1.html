@@ -1609,7 +1609,7 @@ function Visualizer() {
     onClick: () => setShowMixer(m => !m),
     style: {
       ...toolbarBtnStyle,
-      color: showMixer ? "#7ee0ff" : "#fff"
+      color: showMixer ? "#C6FF3D" : "#fff"
     }
   }, "Mixer"), /*#__PURE__*/React.createElement("div", {
     style: toolbarDividerStyle
@@ -1617,7 +1617,7 @@ function Visualizer() {
     onClick: () => isFullscreen ? exitFullscreen() : enterFullscreen(),
     style: {
       ...toolbarBtnStyle,
-      color: isFullscreen ? "#7ee0ff" : "#fff"
+      color: isFullscreen ? "#C6FF3D" : "#fff"
     }
   }, isFullscreen ? "⤢ Exit FS" : "⛶ Fullscreen"), /*#__PURE__*/React.createElement("div", {
     style: toolbarDividerStyle
@@ -1748,18 +1748,20 @@ function Visualizer() {
     style: setupCardStyle
   }, /*#__PURE__*/React.createElement("h1", {
     style: {
-      fontSize: 26,
-      margin: "0 0 4px",
-      fontWeight: 700,
-      letterSpacing: -0.3
+      fontSize: 28,
+      margin: "0 0 6px",
+      fontWeight: 800,
+      letterSpacing: -0.5,
+      textTransform: "uppercase"
     }
   }, "Visualizer"), /*#__PURE__*/React.createElement("p", {
     style: {
-      fontSize: 13,
-      opacity: 0.55,
+      fontSize: 12,
+      opacity: 0.5,
       marginBottom: 24,
       maxWidth: 420,
-      lineHeight: 1.5
+      lineHeight: 1.5,
+      letterSpacing: 0.2
     }
   }, "Pick your options and generate — every result is randomized, even with identical settings."), /*#__PURE__*/React.createElement(SectionLabel, null, "Color Palette"), /*#__PURE__*/React.createElement(OptionRow, null, PALETTES.map((p, i) => /*#__PURE__*/React.createElement("button", {
     key: p.name,
@@ -1956,6 +1958,7 @@ function OptionRow({
     }
   }, children);
 }
+const ACCENT = "#C6FF3D";
 const setupOverlayStyle = {
   position: "absolute",
   inset: 0,
@@ -1973,8 +1976,8 @@ const setupOverlayStyle = {
   overflowX: "hidden",
   WebkitOverflowScrolling: "touch",
   touchAction: "pan-y",
-  background: "rgba(5,6,10,0.75)",
-  backdropFilter: "blur(18px)"
+  background: "rgba(4,4,5,0.86)",
+  backdropFilter: "blur(8px)"
 };
 const setupCardStyle = {
   display: "flex",
@@ -1985,29 +1988,32 @@ const setupCardStyle = {
   maxWidth: 480,
   flex: "0 0 auto",
   marginBottom: 20,
-  color: "#fff",
-  background: "rgba(20,20,26,0.6)",
+  color: "#f5f5f2",
+  background: "rgba(12,12,14,0.95)",
   border: "1px solid rgba(255,255,255,0.08)",
-  borderRadius: 24,
-  padding: "28px 26px",
-  boxShadow: "0 20px 60px rgba(0,0,0,0.4)"
+  borderTop: "2px solid " + ACCENT,
+  borderRadius: 3,
+  padding: "26px 24px",
+  boxShadow: "0 20px 50px rgba(0,0,0,0.5)"
 };
 function chipBase(selected) {
   return {
-    fontSize: 13,
-    fontWeight: 600,
+    fontSize: 12,
+    fontWeight: 700,
     cursor: "pointer",
-    border: "1px solid " + (selected ? "transparent" : "rgba(255,255,255,0.1)"),
-    background: selected ? "#ffffff" : "rgba(255,255,255,0.05)",
-    color: selected ? "#0a0a0c" : "rgba(255,255,255,0.85)",
-    transition: "background 0.15s ease, color 0.15s ease"
+    border: "1px solid " + (selected ? "transparent" : "rgba(255,255,255,0.16)"),
+    background: selected ? ACCENT : "transparent",
+    color: selected ? "#0a0a0a" : "rgba(245,245,242,0.72)",
+    transition: "background 0.12s ease, color 0.12s ease, border-color 0.12s ease",
+    textTransform: "uppercase",
+    letterSpacing: 0.4
   };
 }
 function chipPillStyle(selected) {
   return {
     ...chipBase(selected),
     padding: "9px 16px",
-    borderRadius: 18
+    borderRadius: 3
   };
 }
 function chipStyle(selected, minWidth) {
@@ -2017,7 +2023,7 @@ function chipStyle(selected, minWidth) {
     flexDirection: "column",
     alignItems: "center",
     padding: "10px 14px",
-    borderRadius: 14,
+    borderRadius: 3,
     minWidth: minWidth || 0
   };
 }
@@ -2028,7 +2034,7 @@ function chipSwatchStyle(selected) {
     flexDirection: "column",
     alignItems: "center",
     padding: "7px 9px",
-    borderRadius: 14
+    borderRadius: 3
   };
 }
 const toolbarStyle = {
@@ -2038,34 +2044,36 @@ const toolbarStyle = {
   transform: "translateX(-50%)",
   display: "flex",
   alignItems: "center",
-  background: "rgba(20,20,26,0.55)",
+  background: "rgba(10,10,12,0.88)",
   border: "1px solid rgba(255,255,255,0.1)",
-  borderRadius: 22,
+  borderRadius: 4,
   padding: 6,
-  backdropFilter: "blur(14px)",
-  boxShadow: "0 8px 30px rgba(0,0,0,0.35)",
+  backdropFilter: "blur(6px)",
+  boxShadow: "0 8px 24px rgba(0,0,0,0.4)",
   maxWidth: "calc(100vw - 20px)",
   overflowX: "auto",
   WebkitOverflowScrolling: "touch",
   scrollbarWidth: "none"
 };
 const toolbarBtnStyle = {
-  fontSize: 13,
-  fontWeight: 600,
+  fontSize: 12,
+  fontWeight: 700,
   padding: "10px 16px",
   height: 40,
-  borderRadius: 16,
+  borderRadius: 3,
   border: "none",
   background: "transparent",
   color: "#fff",
   cursor: "pointer",
   whiteSpace: "nowrap",
-  flexShrink: 0
+  flexShrink: 0,
+  textTransform: "uppercase",
+  letterSpacing: 0.5
 };
 const toolbarDividerStyle = {
   width: 1,
   height: 20,
-  background: "rgba(255,255,255,0.12)",
+  background: "rgba(255,255,255,0.14)",
   margin: "0 2px",
   flexShrink: 0
 };
@@ -2075,28 +2083,30 @@ const recordStatusStyle = {
   left: "50%",
   transform: "translateX(-50%)",
   padding: "6px 14px",
-  borderRadius: 12,
-  background: "rgba(20,20,26,0.7)",
-  border: "1px solid rgba(255,255,255,0.1)",
+  borderRadius: 3,
+  background: "rgba(10,10,12,0.92)",
+  border: "1px solid rgba(255,255,255,0.12)",
   color: "#fff",
-  fontSize: 12,
-  fontWeight: 600,
-  backdropFilter: "blur(10px)"
+  fontSize: 11,
+  fontWeight: 700,
+  textTransform: "uppercase",
+  letterSpacing: 0.5
 };
 const revealBtnStyle = {
   position: "absolute",
   bottom: "max(16px, env(safe-area-inset-bottom))",
   right: 16,
   padding: "8px 14px",
-  borderRadius: 16,
-  border: "1px solid rgba(255,255,255,0.1)",
-  background: "rgba(20,20,26,0.5)",
+  borderRadius: 3,
+  border: "1px solid rgba(255,255,255,0.14)",
+  background: "rgba(10,10,12,0.8)",
   color: "#fff",
-  fontSize: 12,
-  fontWeight: 600,
+  fontSize: 11,
+  fontWeight: 700,
   cursor: "pointer",
-  opacity: 0.6,
-  backdropFilter: "blur(10px)"
+  opacity: 0.7,
+  textTransform: "uppercase",
+  letterSpacing: 0.5
 };
 const mixerPanelStyle = {
   position: "absolute",
@@ -2107,12 +2117,11 @@ const mixerPanelStyle = {
   display: "flex",
   flexDirection: "column",
   gap: 12,
-  background: "rgba(16,16,22,0.72)",
+  background: "rgba(10,10,12,0.94)",
   border: "1px solid rgba(255,255,255,0.1)",
-  borderRadius: 20,
+  borderRadius: 4,
   padding: "16px 18px",
-  backdropFilter: "blur(16px)",
-  boxShadow: "0 8px 30px rgba(0,0,0,0.4)",
+  boxShadow: "0 8px 24px rgba(0,0,0,0.45)",
   color: "#fff"
 };
 const mixerRowStyle = {
@@ -2121,37 +2130,41 @@ const mixerRowStyle = {
   gap: 10
 };
 const mixerLabelStyle = {
-  fontSize: 12,
-  fontWeight: 600,
+  fontSize: 11,
+  fontWeight: 700,
   opacity: 0.75,
   width: 78,
   flexShrink: 0,
-  color: "#fff"
+  color: "#fff",
+  textTransform: "uppercase",
+  letterSpacing: 0.5
 };
 const mixerValueStyle = {
   fontSize: 11,
-  opacity: 0.55,
+  opacity: 0.6,
   width: 34,
   textAlign: "right",
   flexShrink: 0,
-  color: "#fff"
+  color: "#fff",
+  fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace"
 };
 const mixerSliderStyle = {
   flex: 1,
-  accentColor: "#7ee0ff",
+  accentColor: ACCENT,
   height: 4
 };
 function mixerTinyBtnStyle(active) {
   return {
     fontSize: 11,
-    fontWeight: 600,
+    fontWeight: 700,
     padding: "6px 10px",
-    borderRadius: 10,
-    border: "1px solid " + (active ? "rgba(126,224,255,0.5)" : "rgba(255,255,255,0.12)"),
-    background: active ? "rgba(126,224,255,0.15)" : "rgba(255,255,255,0.05)",
+    borderRadius: 3,
+    border: "1px solid " + (active ? ACCENT : "rgba(255,255,255,0.14)"),
+    background: active ? "rgba(198,255,61,0.14)" : "rgba(255,255,255,0.05)",
     color: "#fff",
     cursor: "pointer",
-    textTransform: "capitalize"
+    textTransform: "uppercase",
+    letterSpacing: 0.4
   };
 }
 const mixerFlashBtnStyle = {
@@ -2159,19 +2172,21 @@ const mixerFlashBtnStyle = {
   fontSize: 11,
   fontWeight: 700,
   padding: "6px 12px",
-  borderRadius: 10,
-  border: "1px solid rgba(255,255,255,0.14)",
-  background: "rgba(255,255,255,0.08)",
+  borderRadius: 3,
+  border: "1px solid rgba(255,255,255,0.16)",
+  background: "rgba(255,255,255,0.06)",
   color: "#fff",
   cursor: "pointer",
-  whiteSpace: "nowrap"
+  whiteSpace: "nowrap",
+  textTransform: "uppercase",
+  letterSpacing: 0.4
 };
 function mixerSwatchStyle(selected, palette) {
   return {
     width: 26,
     height: 20,
-    borderRadius: 6,
-    border: selected ? "2px solid #7ee0ff" : "1px solid rgba(255,255,255,0.15)",
+    borderRadius: 2,
+    border: selected ? "2px solid " + ACCENT : "1px solid rgba(255,255,255,0.18)",
     background: "linear-gradient(90deg, " + palette.colors.slice(0, 3).join(",") + ")",
     cursor: "pointer",
     padding: 0
@@ -2181,35 +2196,39 @@ const customTextInputStyle = {
   width: "100%",
   maxWidth: 460,
   padding: "12px 14px",
-  borderRadius: 12,
-  border: "1px solid rgba(255,255,255,0.14)",
-  background: "rgba(255,255,255,0.06)",
+  borderRadius: 3,
+  border: "1px solid rgba(255,255,255,0.16)",
+  background: "rgba(255,255,255,0.04)",
   color: "#fff",
   fontSize: 14,
   marginBottom: 20,
   outline: "none"
 };
 const tapBtnStyle = {
-  fontSize: 13,
+  fontSize: 12,
   fontWeight: 700,
   padding: "10px 22px",
-  borderRadius: 14,
-  border: "1px solid rgba(255,255,255,0.14)",
-  background: "rgba(255,255,255,0.08)",
+  borderRadius: 3,
+  border: "1px solid rgba(255,255,255,0.16)",
+  background: "rgba(255,255,255,0.06)",
   color: "#fff",
-  cursor: "pointer"
+  cursor: "pointer",
+  textTransform: "uppercase",
+  letterSpacing: 0.5
 };
 const generateBtnStyle = {
-  fontSize: 15,
-  fontWeight: 700,
-  padding: "13px 28px",
-  borderRadius: 16,
+  fontSize: 14,
+  fontWeight: 800,
+  padding: "14px 28px",
+  borderRadius: 3,
   border: "none",
-  background: "#ffffff",
-  color: "#0a0a0c",
+  background: ACCENT,
+  color: "#0a0a0a",
   cursor: "pointer",
   marginTop: 4,
-  alignSelf: "stretch"
+  alignSelf: "stretch",
+  textTransform: "uppercase",
+  letterSpacing: 1
 };
 try {
   const root = ReactDOM.createRoot(document.getElementById("root"));
