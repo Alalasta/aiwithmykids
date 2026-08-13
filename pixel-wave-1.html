@@ -1247,6 +1247,11 @@ function Visualizer() {
       logoAspectRef.current = img.naturalHeight / img.naturalWidth || 1;
       setLogoPreviewUrl(url);
       setLogoStatus("Logo ready ✓");
+      const g = gRef.current;
+      if (g && g.contentType === "logo") {
+        g.logoImage = img;
+        g.logoAspect = logoAspectRef.current;
+      }
     };
     img.onerror = () => {
       setLogoStatus("Couldn't load that image");
@@ -1294,8 +1299,23 @@ function Visualizer() {
     ctx.stroke();
     lastPointRef.current = pt;
   }
+  function syncDrawSnapshot() {
+    const canvas = drawCanvasRef.current;
+    if (!canvas) return;
+    if (!drawSnapshotRef.current) drawSnapshotRef.current = document.createElement("canvas");
+    const snap = drawSnapshotRef.current;
+    snap.width = canvas.width;
+    snap.height = canvas.height;
+    snap.getContext("2d").drawImage(canvas, 0, 0);
+    const g = gRef.current;
+    if (g && g.contentType === "draw") {
+      g.logoImage = snap;
+      g.logoAspect = snap.height / snap.width || 1;
+    }
+  }
   function handleDrawEnd() {
     isDrawingRef.current = false;
+    syncDrawSnapshot();
   }
   function undoDrawing() {
     const canvas = drawCanvasRef.current;
@@ -1303,12 +1323,14 @@ function Visualizer() {
     const last = drawUndoStackRef.current.pop();
     if (!last) return;
     canvas.getContext("2d").putImageData(last, 0, 0);
+    syncDrawSnapshot();
   }
   function clearDrawing() {
     const canvas = drawCanvasRef.current;
     if (!canvas) return;
     pushDrawUndoSnapshot();
     canvas.getContext("2d").clearRect(0, 0, canvas.width, canvas.height);
+    syncDrawSnapshot();
   }
   function setMixSpeed(v) {
     setMixSpeedVal(v);
@@ -1329,6 +1351,41 @@ function Visualizer() {
   function livePalette(i) {
     setPaletteIdx(i);
     if (gRef.current) applyLivePalette(gRef.current, PALETTES[i]);
+  }
+  function liveContentType(ct) {
+    setContentType(ct);
+    const g = gRef.current;
+    if (!g) return;
+    const pool = (customText || "").split("").filter(ch => ch.trim().length > 0);
+    let imgSrc = null,
+      imgAspect = 1;
+    if (ct === "logo") {
+      imgSrc = logoImageRef.current;
+      imgAspect = logoAspectRef.current;
+    } else if (ct === "draw") {
+      imgSrc = drawSnapshotRef.current;
+      imgAspect = drawSnapshotRef.current ? drawSnapshotRef.current.height / drawSnapshotRef.current.width : 1;
+    }
+    g.contentType = ct;
+    g.customPool = pool;
+    g.logoImage = imgSrc;
+    g.logoAspect = imgAspect;
+    g.particles.forEach(p => {
+      p.content = randomContent(ct, pool);
+      const size = ct === "logo" || ct === "draw" ? rand(34, 64) : rand(18, 42);
+      p.size = size;
+      p.baseSize = size;
+    });
+  }
+  function liveCustomText(text) {
+    setCustomText(text);
+    const g = gRef.current;
+    if (!g || g.contentType !== "custom") return;
+    const pool = (text || "").split("").filter(ch => ch.trim().length > 0);
+    g.customPool = pool;
+    g.particles.forEach(p => {
+      p.content = randomContent("custom", pool);
+    });
   }
   function setKaleido(on) {
     setKaleidoOn(on);
@@ -1559,17 +1616,7 @@ function Visualizer() {
     const densityMult = DENSITY_OPTIONS.find(d => d.key === densityKey).mult;
     const speedMult = SPEED_OPTIONS.find(s => s.key === speedKey).mult;
     const drawCanvas = drawCanvasRef.current;
-    if (contentType === "draw" && drawCanvas) {
-      // The sketch pad only exists while the setup screen is mounted, so we
-      // snapshot it into a persistent offscreen canvas here. Later Shuffles
-      // (fired while the setup screen is gone) reuse this snapshot instead
-      // of a now-missing DOM canvas.
-      if (!drawSnapshotRef.current) drawSnapshotRef.current = document.createElement("canvas");
-      const snap = drawSnapshotRef.current;
-      snap.width = drawCanvas.width;
-      snap.height = drawCanvas.height;
-      snap.getContext("2d").drawImage(drawCanvas, 0, 0);
-    }
+    if (contentType === "draw" && drawCanvas) syncDrawSnapshot();
     const imageSource = contentType === "draw" ? drawSnapshotRef.current : logoImageRef.current;
     const imageAspect = contentType === "draw" ? drawSnapshotRef.current ? drawSnapshotRef.current.height / drawSnapshotRef.current.width : 1 : logoAspectRef.current;
     const cfg = makeConfig(contentType, palette, w, h, densityMult, speedMult, customText, imageSource, imageAspect);
@@ -1816,7 +1863,94 @@ function Visualizer() {
     onClick: () => livePalette(i),
     title: p.name,
     style: mixerSwatchStyle(i === paletteIdx, p)
-  }))))), recordStatus && /*#__PURE__*/React.createElement("div", {
+  })))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      flexDirection: "column",
+      gap: 8
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: mixerLabelStyle
+  }, "Content"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: 6,
+      flexWrap: "wrap"
+    }
+  }, CONTENT_TYPES.map(c => /*#__PURE__*/React.createElement("button", {
+    key: c.key,
+    onClick: () => liveContentType(c.key),
+    style: mixerTinyBtnStyle(c.key === contentType)
+  }, c.label))), contentType === "logo" && /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      alignItems: "center",
+      gap: 10,
+      flexWrap: "wrap"
+    }
+  }, /*#__PURE__*/React.createElement("label", {
+    style: {
+      ...mixerTinyBtnStyle(false),
+      cursor: "pointer"
+    }
+  }, logoPreviewUrl ? "Change Image" : "Upload Image", /*#__PURE__*/React.createElement("input", {
+    type: "file",
+    accept: "image/*",
+    style: {
+      display: "none"
+    },
+    onChange: onLogoChosen
+  })), logoPreviewUrl && /*#__PURE__*/React.createElement("img", {
+    src: logoPreviewUrl,
+    style: {
+      height: 30,
+      borderRadius: 2,
+      background: "rgba(255,255,255,0.06)",
+      padding: 3
+    }
+  })), contentType === "custom" && /*#__PURE__*/React.createElement("input", {
+    type: "text",
+    value: customText,
+    maxLength: 40,
+    placeholder: "Type your text or hook",
+    onChange: e => liveCustomText(e.target.value),
+    style: {
+      ...customTextInputStyle,
+      marginBottom: 0,
+      maxWidth: "100%"
+    }
+  }), contentType === "draw" && /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      flexDirection: "column",
+      alignItems: "flex-start",
+      gap: 8
+    }
+  }, /*#__PURE__*/React.createElement("canvas", {
+    ref: drawCanvasRef,
+    width: 220,
+    height: 220,
+    onPointerDown: handleDrawStart,
+    onPointerMove: handleDrawMove,
+    onPointerUp: handleDrawEnd,
+    onPointerLeave: handleDrawEnd,
+    style: {
+      ...drawCanvasStyle,
+      width: 220,
+      height: 220
+    }
+  }), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: 6
+    }
+  }, /*#__PURE__*/React.createElement("button", {
+    onClick: undoDrawing,
+    style: mixerTinyBtnStyle(false)
+  }, "Undo"), /*#__PURE__*/React.createElement("button", {
+    onClick: clearDrawing,
+    style: mixerTinyBtnStyle(false)
+  }, "Clear"))))), recordStatus && /*#__PURE__*/React.createElement("div", {
     style: recordStatusStyle
   }, recordStatus), !showControls && /*#__PURE__*/React.createElement("button", {
     onClick: e => {
