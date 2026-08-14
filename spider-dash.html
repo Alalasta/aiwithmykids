@@ -397,20 +397,21 @@ const SKINS = [{
   accent: '#ffb020',
   leg: '#5a0a16',
   eye: '#1a0004'
+}, {
+  id: 'orb',
+  name: 'Golden Orb',
+  body: '#3a2a10',
+  accent: '#ffcc33',
+  leg: '#241a08',
+  eye: '#1a1204'
+}, {
+  id: 'albino',
+  name: 'Albino',
+  body: '#f0ece0',
+  accent: '#ff6a6a',
+  leg: '#c9c2b0',
+  eye: '#c02020'
 }];
-
-/* ---------------------------------- TRACK PALETTE (single path) ---------------------------------- */
-const TRACK = {
-  skyTop: '#1a1408',
-  skyBottom: '#3a2f14',
-  ground1: '#2a2214',
-  ground2: '#1f1a0e',
-  road: '#4a3d22',
-  rumbleA: '#e8c866',
-  rumbleB: '#2a2214',
-  lane: 'rgba(230,210,160,0.55)',
-  boosterGlow: '#ffe066'
-};
 
 /* ---------------------------------- DRAW HELPERS ---------------------------------- */
 function roundRectPath(ctx, x, y, w, h, r) {
@@ -573,7 +574,211 @@ function drawRockObstacle(ctx, x, y, w, h) {
   ctx.stroke();
   ctx.restore();
 }
-const OBSTACLE_DRAWERS = [drawLeafObstacle, drawTwigObstacle, drawRockObstacle];
+
+/* ---- attic obstacle variants ---- */
+function drawNailObstacle(ctx, x, y, w, h) {
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate(0.65);
+  ctx.fillStyle = 'rgba(0,0,0,0.3)';
+  ctx.beginPath();
+  ctx.ellipse(-2, h * 0.28, w * 0.45, h * 0.12, 0, 0, Math.PI * 2);
+  ctx.fill();
+  const shaftGrad = ctx.createLinearGradient(-4, 0, 4, 0);
+  shaftGrad.addColorStop(0, '#8a7458');
+  shaftGrad.addColorStop(0.5, '#d9c9a8');
+  shaftGrad.addColorStop(1, '#6b5a40');
+  ctx.fillStyle = shaftGrad;
+  roundRectPath(ctx, -3.5, -h * 0.45, 7, h * 0.85, 2);
+  ctx.fill();
+  ctx.fillStyle = '#a8977a';
+  ctx.beginPath();
+  ctx.arc(0, -h * 0.45, 7, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(0,0,0,0.35)';
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+  ctx.restore();
+}
+function drawDustBunnyObstacle(ctx, x, y, w, h) {
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.fillStyle = 'rgba(0,0,0,0.28)';
+  ctx.beginPath();
+  ctx.ellipse(2, h * 0.3, w * 0.5, h * 0.12, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = '#c9c3b8';
+  const puffs = [[0, 0, 0.32], [-w * 0.24, h * 0.08, 0.22], [w * 0.24, h * 0.06, 0.24], [0, -h * 0.2, 0.24], [w * 0.05, h * 0.22, 0.2]];
+  puffs.forEach(([px, py, r]) => {
+    ctx.beginPath();
+    ctx.arc(px, py, w * r, 0, Math.PI * 2);
+    ctx.fill();
+  });
+  ctx.strokeStyle = 'rgba(140,135,120,0.6)';
+  ctx.lineWidth = 1;
+  for (let i = 0; i < 6; i++) {
+    const ang = i / 6 * Math.PI * 2;
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.lineTo(Math.cos(ang) * w * 0.42, Math.sin(ang) * w * 0.3);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+function drawSplinterObstacle(ctx, x, y, w, h) {
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate(-0.4);
+  ctx.fillStyle = 'rgba(0,0,0,0.3)';
+  ctx.beginPath();
+  ctx.ellipse(2, h * 0.3, w * 0.4, h * 0.12, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = '#8a6a3e';
+  ctx.beginPath();
+  ctx.moveTo(0, -h / 2);
+  ctx.lineTo(w * 0.22, h * 0.1);
+  ctx.lineTo(w * 0.06, h / 2);
+  ctx.lineTo(-w * 0.1, h * 0.15);
+  ctx.lineTo(-w * 0.2, -h * 0.1);
+  ctx.closePath();
+  ctx.fill();
+  ctx.strokeStyle = '#5a4426';
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(-w * 0.05, -h * 0.35);
+  ctx.lineTo(0, h * 0.3);
+  ctx.stroke();
+  ctx.restore();
+}
+
+/* ---- kitchen obstacle variants ---- */
+function drawSpongeObstacle(ctx, x, y, w, h) {
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.fillStyle = 'rgba(0,0,0,0.28)';
+  ctx.beginPath();
+  ctx.ellipse(2, h * 0.32, w * 0.48, h * 0.13, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = '#e0c84a';
+  roundRectPath(ctx, -w / 2, -h * 0.1, w, h * 0.5, 5);
+  ctx.fill();
+  ctx.fillStyle = '#4a9e5c';
+  roundRectPath(ctx, -w / 2, -h * 0.42, w, h * 0.36, 5);
+  ctx.fill();
+  ctx.fillStyle = 'rgba(0,0,0,0.15)';
+  for (let i = -1; i <= 1; i++) {
+    ctx.beginPath();
+    ctx.arc(i * w * 0.24, h * 0.1, 3, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.strokeStyle = 'rgba(0,0,0,0.3)';
+  ctx.lineWidth = 1.5;
+  roundRectPath(ctx, -w / 2, -h * 0.42, w, h * 0.82, 5);
+  ctx.stroke();
+  ctx.restore();
+}
+function drawSaltPileObstacle(ctx, x, y, w, h) {
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.fillStyle = 'rgba(0,0,0,0.22)';
+  ctx.beginPath();
+  ctx.ellipse(2, h * 0.34, w * 0.5, h * 0.12, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = '#f2f0ea';
+  ctx.beginPath();
+  ctx.moveTo(-w / 2, h * 0.34);
+  ctx.quadraticCurveTo(-w * 0.1, -h * 0.5, 0, -h * 0.5);
+  ctx.quadraticCurveTo(w * 0.1, -h * 0.5, w / 2, h * 0.34);
+  ctx.closePath();
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(180,175,160,0.7)';
+  ctx.lineWidth = 1;
+  ctx.stroke();
+  ctx.fillStyle = 'rgba(200,196,180,0.9)';
+  for (let i = 0; i < 8; i++) {
+    ctx.beginPath();
+    ctx.arc((Math.random() - 0.5) * w * 0.6, h * 0.1 + (Math.random() - 0.5) * h * 0.3, 1.2, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
+}
+function drawBottleCapObstacle(ctx, x, y, w, h) {
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.fillStyle = 'rgba(0,0,0,0.28)';
+  ctx.beginPath();
+  ctx.ellipse(2, h * 0.3, w * 0.42, h * 0.12, 0, 0, Math.PI * 2);
+  ctx.fill();
+  const r = w * 0.4;
+  ctx.fillStyle = '#c02020';
+  for (let i = 0; i < 20; i++) {
+    const ang = i / 20 * Math.PI * 2;
+    ctx.save();
+    ctx.rotate(ang);
+    ctx.fillRect(-2, -r - 4, 4, 6);
+    ctx.restore();
+  }
+  ctx.beginPath();
+  ctx.arc(0, 0, r, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = '#e8e8e0';
+  ctx.beginPath();
+  ctx.arc(0, 0, r * 0.62, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(0,0,0,0.35)';
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+  ctx.restore();
+}
+
+/* ---------------------------------- TRACKS ---------------------------------- */
+const TRACKS = [{
+  id: 'garden',
+  name: 'Garden Path',
+  skyTop: '#1a1408',
+  skyBottom: '#3a2f14',
+  ground1: '#2a2214',
+  ground2: '#1f1a0e',
+  road: '#4a3d22',
+  rumbleA: '#e8c866',
+  rumbleB: '#2a2214',
+  lane: 'rgba(230,210,160,0.55)',
+  hud: '#ffe066',
+  boosterGlow: '#ffe066',
+  obstacleParticle: '#8a6a3a',
+  obstacleDrawers: [drawLeafObstacle, drawTwigObstacle, drawRockObstacle]
+}, {
+  id: 'attic',
+  name: 'Dusty Attic',
+  skyTop: '#241f1a',
+  skyBottom: '#4a3f30',
+  ground1: '#332c22',
+  ground2: '#241f18',
+  road: '#5a4a34',
+  rumbleA: '#c9b98a',
+  rumbleB: '#332c22',
+  lane: 'rgba(220,210,180,0.4)',
+  hud: '#ffd27a',
+  boosterGlow: '#ffd27a',
+  obstacleParticle: '#8a7458',
+  obstacleDrawers: [drawNailObstacle, drawDustBunnyObstacle, drawSplinterObstacle]
+}, {
+  id: 'kitchen',
+  name: 'Kitchen Counter',
+  skyTop: '#e8e4da',
+  skyBottom: '#cfc8b8',
+  ground1: '#b8b0a0',
+  ground2: '#a89f8c',
+  road: '#dcd6c8',
+  rumbleA: '#8a8478',
+  rumbleB: '#f0ece0',
+  lane: 'rgba(60,55,45,0.35)',
+  hud: '#0a6a8a',
+  boosterGlow: '#29b6d8',
+  obstacleParticle: '#8a8478',
+  obstacleDrawers: [drawSpongeObstacle, drawSaltPileObstacle, drawBottleCapObstacle]
+}];
 function drawBug(ctx, x, y, size, pulse, glowColor) {
   ctx.save();
   ctx.translate(x, y);
@@ -611,6 +816,7 @@ function drawBug(ctx, x, y, size, pulse, glowColor) {
 /* ---------------------------------- GAME COMPONENT ---------------------------------- */
 function GameCanvas({
   skin,
+  track,
   onGameOver
 }) {
   const canvasRef = useRef(null);
@@ -726,7 +932,7 @@ function GameCanvas({
       const x = left + 32 + Math.random() * (width - 64);
       stateRef.current.obstacles.push({
         type: isBug ? 'bug' : 'barrier',
-        drawer: OBSTACLE_DRAWERS[Math.floor(Math.random() * OBSTACLE_DRAWERS.length)],
+        drawer: track.obstacleDrawers[Math.floor(Math.random() * track.obstacleDrawers.length)],
         x,
         y: -90,
         w: size,
@@ -806,8 +1012,8 @@ function GameCanvas({
             s.currentSpeed = Math.min(s.maxSpeed, s.currentSpeed + 215);
             s.score += 25;
             s.flashTimer = 0.15;
-            s.flashColor = TRACK.boosterGlow;
-            spawnParticles(o.x, o.y, TRACK.boosterGlow, 14);
+            s.flashColor = track.boosterGlow;
+            spawnParticles(o.x, o.y, track.boosterGlow, 14);
             return false;
           } else if (!invulnActive) {
             s.currentSpeed = Math.max(s.minSpeed, s.currentSpeed - 180);
@@ -816,7 +1022,7 @@ function GameCanvas({
             s.shake = 0.35;
             s.flashTimer = 0.2;
             s.flashColor = '#ff3b3b';
-            spawnParticles(o.x, o.y, '#8a6a3a', 14);
+            spawnParticles(o.x, o.y, track.obstacleParticle, 14);
             if (s.lives <= 0) {
               s.gameOver = true;
               onGameOver(Math.floor(s.score));
@@ -854,35 +1060,35 @@ function GameCanvas({
         ctx.translate((Math.random() - 0.5) * 10, (Math.random() - 0.5) * 10);
       }
       const skyGrad = ctx.createLinearGradient(0, 0, 0, h);
-      skyGrad.addColorStop(0, TRACK.skyTop);
-      skyGrad.addColorStop(1, TRACK.skyBottom);
+      skyGrad.addColorStop(0, track.skyTop);
+      skyGrad.addColorStop(1, track.skyBottom);
       ctx.fillStyle = skyGrad;
       ctx.fillRect(0, 0, w, h);
-      ctx.fillStyle = TRACK.ground1;
+      ctx.fillStyle = track.ground1;
       ctx.fillRect(0, 0, left, h);
       ctx.fillRect(right, 0, w - right, h);
-      ctx.fillStyle = TRACK.ground2;
+      ctx.fillStyle = track.ground2;
       for (let y = -60 + s.dashOffset % 50; y < h; y += 50) {
         ctx.fillRect(0, y, left, 4);
         ctx.fillRect(right, y, w - right, 4);
       }
-      ctx.fillStyle = TRACK.road;
+      ctx.fillStyle = track.road;
       ctx.fillRect(left, 0, width, h);
       const rumbleW = 14;
       for (let side = 0; side < 2; side++) {
         const bx = side === 0 ? left - rumbleW : right;
         for (let y = -60 + s.dashOffset % 40; y < h; y += 40) {
-          ctx.fillStyle = Math.floor(y / 40) % 2 === 0 ? TRACK.rumbleA : TRACK.rumbleB;
+          ctx.fillStyle = Math.floor(y / 40) % 2 === 0 ? track.rumbleA : track.rumbleB;
           ctx.fillRect(bx, y, rumbleW, 26);
         }
       }
-      ctx.fillStyle = TRACK.lane;
+      ctx.fillStyle = track.lane;
       const laneX = left + width / 2;
       for (let y = -60 + s.dashOffset; y < h; y += 60) {
         ctx.fillRect(laneX - 4, y, 8, 32);
       }
       s.obstacles.forEach(o => {
-        if (o.type === 'barrier') o.drawer(ctx, o.x, o.y, o.w, o.h);else drawBug(ctx, o.x, o.y, o.w, o.pulse, TRACK.boosterGlow);
+        if (o.type === 'barrier') o.drawer(ctx, o.x, o.y, o.w, o.h);else drawBug(ctx, o.x, o.y, o.w, o.pulse, track.boosterGlow);
       });
       s.particles.forEach(p => {
         ctx.globalAlpha = Math.max(0, p.life / 0.7);
@@ -936,7 +1142,7 @@ function GameCanvas({
       window.removeEventListener('pointermove', onPointerMove);
       window.removeEventListener('pointerup', onPointerUp);
     };
-  }, [skin, onGameOver]);
+  }, [skin, track, onGameOver]);
   return /*#__PURE__*/React.createElement("div", {
     style: {
       position: 'absolute',
@@ -991,7 +1197,7 @@ function GameCanvas({
   }, /*#__PURE__*/React.createElement("div", {
     className: "orb",
     style: {
-      color: TRACK.boosterGlow,
+      color: track.boosterGlow,
       fontSize: 16,
       fontWeight: 700,
       background: 'rgba(0,0,0,0.4)',
@@ -1077,11 +1283,74 @@ function SpiderPreview({
     fill: skin.eye
   }));
 }
+function TrackPreview({
+  track
+}) {
+  return /*#__PURE__*/React.createElement("svg", {
+    width: "100%",
+    height: "70",
+    viewBox: "0 0 220 70",
+    preserveAspectRatio: "none"
+  }, /*#__PURE__*/React.createElement("defs", null, /*#__PURE__*/React.createElement("linearGradient", {
+    id: `sky-${track.id}`,
+    x1: "0",
+    y1: "0",
+    x2: "0",
+    y2: "1"
+  }, /*#__PURE__*/React.createElement("stop", {
+    offset: "0%",
+    stopColor: track.skyTop
+  }), /*#__PURE__*/React.createElement("stop", {
+    offset: "100%",
+    stopColor: track.skyBottom
+  }))), /*#__PURE__*/React.createElement("rect", {
+    width: "220",
+    height: "70",
+    fill: `url(#sky-${track.id})`
+  }), /*#__PURE__*/React.createElement("rect", {
+    x: "0",
+    y: "30",
+    width: "220",
+    height: "40",
+    fill: track.ground1
+  }), /*#__PURE__*/React.createElement("rect", {
+    x: "70",
+    y: "30",
+    width: "80",
+    height: "40",
+    fill: track.road
+  }), /*#__PURE__*/React.createElement("rect", {
+    x: "70",
+    y: "30",
+    width: "6",
+    height: "40",
+    fill: track.rumbleA
+  }), /*#__PURE__*/React.createElement("rect", {
+    x: "144",
+    y: "30",
+    width: "6",
+    height: "40",
+    fill: track.rumbleA
+  }), /*#__PURE__*/React.createElement("rect", {
+    x: "106",
+    y: "30",
+    width: "8",
+    height: "14",
+    fill: track.lane
+  }), /*#__PURE__*/React.createElement("rect", {
+    x: "106",
+    y: "54",
+    width: "8",
+    height: "14",
+    fill: track.lane
+  }));
+}
 
 /* ---------------------------------- MENU ---------------------------------- */
 function Menu({
   onStart
 }) {
+  const [trackIdx, setTrackIdx] = useState(0);
   const [skinIdx, setSkinIdx] = useState(0);
   return /*#__PURE__*/React.createElement("div", {
     style: {
@@ -1107,7 +1376,7 @@ function Menu({
   }, /*#__PURE__*/React.createElement("h1", {
     className: "orb",
     style: {
-      fontSize: 'clamp(28px, 5.5vw, 56px)',
+      fontSize: 'clamp(26px, 5vw, 52px)',
       margin: 0,
       letterSpacing: 2,
       background: 'linear-gradient(90deg,#c8f56a,#ffe066)',
@@ -1119,12 +1388,55 @@ function Menu({
     style: {
       opacity: 0.7,
       marginTop: 8,
-      marginBottom: 22,
+      marginBottom: 20,
       textAlign: 'center',
       maxWidth: 460,
       fontSize: 14
     }
-  }, "Dodge the leaves, twigs, and rocks. Snag flies and bugs for a speed boost. Arrow keys / A-D to steer, or drag with mouse or finger."), /*#__PURE__*/React.createElement("div", {
+  }, "Dodge the obstacles, snag flies and bugs for a speed boost. Arrow keys / A-D to steer, or drag with mouse or finger."), /*#__PURE__*/React.createElement("div", {
+    className: "orb",
+    style: {
+      fontSize: 14,
+      letterSpacing: 1,
+      opacity: 0.75,
+      marginBottom: 10
+    }
+  }, "CHOOSE YOUR RACE"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: 'flex',
+      gap: 14,
+      flexWrap: 'wrap',
+      justifyContent: 'center',
+      maxWidth: 720,
+      marginBottom: 24
+    }
+  }, TRACKS.map((t, i) => /*#__PURE__*/React.createElement("button", {
+    key: t.id,
+    onClick: () => setTrackIdx(i),
+    style: {
+      width: 200,
+      background: i === trackIdx ? 'rgba(200,245,106,0.15)' : 'rgba(255,255,255,0.06)',
+      border: i === trackIdx ? '2px solid #c8f56a' : '2px solid rgba(255,255,255,0.2)',
+      borderRadius: 14,
+      padding: 8,
+      overflow: 'hidden',
+      color: '#ffffff'
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      borderRadius: 8,
+      overflow: 'hidden',
+      marginBottom: 6
+    }
+  }, /*#__PURE__*/React.createElement(TrackPreview, {
+    track: t
+  })), /*#__PURE__*/React.createElement("span", {
+    className: "orb",
+    style: {
+      fontSize: 12,
+      letterSpacing: 0.5
+    }
+  }, t.name)))), /*#__PURE__*/React.createElement("div", {
     className: "orb",
     style: {
       fontSize: 14,
@@ -1157,11 +1469,11 @@ function Menu({
     }
   }, /*#__PURE__*/React.createElement(SpiderPreview, {
     skin: skin,
-    size: 58
+    size: 54
   }), /*#__PURE__*/React.createElement("span", {
     className: "orb",
     style: {
-      fontSize: 11,
+      fontSize: 10.5,
       letterSpacing: 0.3,
       textAlign: 'center'
     }
@@ -1175,7 +1487,7 @@ function Menu({
       borderTop: '1px solid rgba(255,255,255,0.08)'
     }
   }, /*#__PURE__*/React.createElement("button", {
-    onClick: () => onStart(SKINS[skinIdx]),
+    onClick: () => onStart(TRACKS[trackIdx], SKINS[skinIdx]),
     className: "orb",
     style: {
       fontSize: 20,
@@ -1186,7 +1498,7 @@ function Menu({
       border: 'none',
       borderRadius: 40,
       padding: '16px 48px',
-      boxShadow: '0 8px 24px rgba(180,230,60,0.4)'
+      boxShadow: '0 8px 24px rgba(180,230,60,0.45)'
     }
   }, "START DASH")));
 }
@@ -1259,6 +1571,7 @@ function GameOver({
 function App() {
   const [screen, setScreen] = useState('menu');
   const [skin, setSkin] = useState(SKINS[0]);
+  const [track, setTrack] = useState(TRACKS[0]);
   const [finalScore, setFinalScore] = useState(0);
   const handleGameOver = useCallback(score => {
     setFinalScore(score);
@@ -1271,13 +1584,15 @@ function App() {
       background: '#05050a'
     }
   }, screen === 'menu' && /*#__PURE__*/React.createElement(Menu, {
-    onStart: s => {
+    onStart: (t, s) => {
+      setTrack(t);
       setSkin(s);
       setScreen('playing');
     }
   }), screen === 'playing' && /*#__PURE__*/React.createElement(GameCanvas, {
     key: Date.now(),
     skin: skin,
+    track: track,
     onGameOver: handleGameOver
   }), screen === 'gameover' && /*#__PURE__*/React.createElement(GameOver, {
     score: finalScore,
