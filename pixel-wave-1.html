@@ -4,6 +4,14 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
 <title>Visualizer</title>
+<link rel="manifest" href="data:application/manifest+json;base64,eyJuYW1lIjogIlZpc3VhbGl6ZXIiLCAic2hvcnRfbmFtZSI6ICJWaXN1YWxpemVyIiwgImRlc2NyaXB0aW9uIjogIkF1ZGlvLXJlYWN0aXZlIHBhcnRpY2xlIHZpc3VhbGl6ZXIgZm9yIERKcyBhbmQgVkpzIiwgInN0YXJ0X3VybCI6ICIuIiwgImRpc3BsYXkiOiAic3RhbmRhbG9uZSIsICJiYWNrZ3JvdW5kX2NvbG9yIjogIiMwYTBhMGEiLCAidGhlbWVfY29sb3IiOiAiIzBhMGEwYSIsICJvcmllbnRhdGlvbiI6ICJhbnkiLCAiaWNvbnMiOiBbeyJzcmMiOiAiZGF0YTppbWFnZS9zdmcreG1sO2Jhc2U2NCxQSE4yWnlCNGJXeHVjejBpYUhSMGNEb3ZMM2QzZHk1M015NXZjbWN2TWpBd01DOXpkbWNpSUhacFpYZENiM2c5SWpBZ01DQTFNVElnTlRFeUlqNDhjbVZqZENCM2FXUjBhRDBpTlRFeUlpQm9aV2xuYUhROUlqVXhNaUlnWm1sc2JEMGlJekJoTUdFd1lTSXZQanhuSUdacGJHdzlJaU5ETmtaR00wUWlQanh5WldOMElIZzlJakUwTmlJZ2VUMGlNalUySWlCM2FXUjBhRDBpTlRRaUlHaGxhV2RvZEQwaU1UVXdJaUJ5ZUQwaU1UUWlMejQ4Y21WamRDQjRQU0l5TWpraUlIazlJakUzTmlJZ2QybGtkR2c5SWpVMElpQm9aV2xuYUhROUlqSXpNQ0lnY25nOUlqRTBJaTgrUEhKbFkzUWdlRDBpTXpFeUlpQjVQU0l5TVRZaUlIZHBaSFJvUFNJMU5DSWdhR1ZwWjJoMFBTSXhPVEFpSUhKNFBTSXhOQ0l2UGp3dlp6NDhMM04yWno0PSIsICJzaXplcyI6ICI1MTJ4NTEyIiwgInR5cGUiOiAiaW1hZ2Uvc3ZnK3htbCIsICJwdXJwb3NlIjogImFueSJ9LCB7InNyYyI6ICJkYXRhOmltYWdlL3N2Zyt4bWw7YmFzZTY0LFBITjJaeUI0Yld4dWN6MGlhSFIwY0RvdkwzZDNkeTUzTXk1dmNtY3ZNakF3TUM5emRtY2lJSFpwWlhkQ2IzZzlJakFnTUNBMU1USWdOVEV5SWo0OGNtVmpkQ0IzYVdSMGFEMGlOVEV5SWlCb1pXbG5hSFE5SWpVeE1pSWdabWxzYkQwaUl6QmhNR0V3WVNJdlBqeG5JR1pwYkd3OUlpTkROa1pHTTBRaVBqeHlaV04wSUhnOUlqRTNOaUlnZVQwaU1qWTJJaUIzYVdSMGFEMGlORFFpSUdobGFXZG9kRDBpTVRJd0lpQnllRDBpTVRFaUx6NDhjbVZqZENCNFBTSXlORFlpSUhrOUlqSXdOaUlnZDJsa2RHZzlJalEwSWlCb1pXbG5hSFE5SWpFNE1DSWdjbmc5SWpFeElpOCtQSEpsWTNRZ2VEMGlNekUySWlCNVBTSXlNellpSUhkcFpIUm9QU0kwTkNJZ2FHVnBaMmgwUFNJeE5UQWlJSEo0UFNJeE1TSXZQand2Wno0OEwzTjJaejQ9IiwgInNpemVzIjogIjUxMng1MTIiLCAidHlwZSI6ICJpbWFnZS9zdmcreG1sIiwgInB1cnBvc2UiOiAibWFza2FibGUifV19" />
+<link rel="icon" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA1MTIgNTEyIj48cmVjdCB3aWR0aD0iNTEyIiBoZWlnaHQ9IjUxMiIgZmlsbD0iIzBhMGEwYSIvPjxnIGZpbGw9IiNDNkZGM0QiPjxyZWN0IHg9IjE0NiIgeT0iMjU2IiB3aWR0aD0iNTQiIGhlaWdodD0iMTUwIiByeD0iMTQiLz48cmVjdCB4PSIyMjkiIHk9IjE3NiIgd2lkdGg9IjU0IiBoZWlnaHQ9IjIzMCIgcng9IjE0Ii8+PHJlY3QgeD0iMzEyIiB5PSIyMTYiIHdpZHRoPSI1NCIgaGVpZ2h0PSIxOTAiIHJ4PSIxNCIvPjwvZz48L3N2Zz4=" />
+<link rel="apple-touch-icon" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA1MTIgNTEyIj48cmVjdCB3aWR0aD0iNTEyIiBoZWlnaHQ9IjUxMiIgZmlsbD0iIzBhMGEwYSIvPjxnIGZpbGw9IiNDNkZGM0QiPjxyZWN0IHg9IjE0NiIgeT0iMjU2IiB3aWR0aD0iNTQiIGhlaWdodD0iMTUwIiByeD0iMTQiLz48cmVjdCB4PSIyMjkiIHk9IjE3NiIgd2lkdGg9IjU0IiBoZWlnaHQ9IjIzMCIgcng9IjE0Ii8+PHJlY3QgeD0iMzEyIiB5PSIyMTYiIHdpZHRoPSI1NCIgaGVpZ2h0PSIxOTAiIHJ4PSIxNCIvPjwvZz48L3N2Zz4=" />
+<meta name="theme-color" content="#0a0a0a" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="Visualizer" />
 <style>
   html, body {
     margin: 0; padding: 0; width: 100%; height: 100%;
@@ -453,6 +461,37 @@ const SPEED_OPTIONS = [{
   mult: 3.2
 }];
 const PATTERNS = ["rain", "orbit", "float", "burst", "wave", "spiral", "matrix", "ribbon", "hurricane", "soundwave"];
+const PATTERN_OPTIONS = [{
+  key: "rain",
+  label: "Rain"
+}, {
+  key: "orbit",
+  label: "Orbit"
+}, {
+  key: "float",
+  label: "Float"
+}, {
+  key: "burst",
+  label: "Burst"
+}, {
+  key: "wave",
+  label: "Wave"
+}, {
+  key: "spiral",
+  label: "Spiral"
+}, {
+  key: "matrix",
+  label: "Matrix"
+}, {
+  key: "ribbon",
+  label: "Ribbon"
+}, {
+  key: "hurricane",
+  label: "Hurricane"
+}, {
+  key: "soundwave",
+  label: "Sound Wave"
+}];
 const LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
 const DIGITS = "0123456789";
 const EMOJI_POOL = ["✦", "✧", "✩", "✪", "✫", "✬", "✭", "✮", "✯", "✰", "★", "☆", "●", "○", "◆", "◇", "▲", "△", "▼", "▽", "✕", "✚", "❖", "❋"];
@@ -706,13 +745,14 @@ function makeParticle(pattern, contentType, palette, w, h, centers, customPool) 
     phase: rand(0, Math.PI * 2)
   };
 }
-function makeConfig(contentType, palette, w, h, densityMult, speedMult, customText, logoImage, logoAspect) {
+function makeConfig(contentType, palette, w, h, densityMult, speedMult, customText, logoImage, logoAspect, patternOverride) {
   // Liquid Light is a full-canvas blob effect, not a particle pattern, and
   // the person asked for it to stay off the random Shuffle pool entirely.
   // Forcing the pattern here (instead of adding "liquid" to PATTERNS) means
   // it can never be picked by chance -- only by deliberately choosing the
-  // Liquid Light content type.
-  const pattern = contentType === "liquid" ? "liquid" : choice(PATTERNS);
+  // Liquid Light content type. A locked-in pattern choice from the mixer
+  // still yields to that rule if Liquid Light is active.
+  const pattern = contentType === "liquid" ? "liquid" : patternOverride || choice(PATTERNS);
   let trail = Math.random() < 0.5;
   const centers = Array.from({
     length: randInt(1, 3)
@@ -1226,6 +1266,7 @@ function Visualizer() {
   const [screen, setScreen] = useState("setup");
   const [paletteIdx, setPaletteIdx] = useState(0);
   const [contentType, setContentType] = useState("shapes");
+  const [patternLock, setPatternLock] = useState(null);
   const [customText, setCustomText] = useState("PIXELWAVE");
   const [densityKey, setDensityKey] = useState("normal");
   const [speedKey, setSpeedKey] = useState("normal");
@@ -1492,6 +1533,19 @@ function Visualizer() {
       p.baseSize = size;
     });
   }
+  function livePattern(patternKey) {
+    setPatternLock(patternKey);
+    // Pattern changes the whole particle layout (grid spacing, orbit
+    // centers, row counts, etc.), so unlike Content this always needs a
+    // real regenerate rather than an in-place swap. Passing patternKey
+    // directly avoids the same state-batching staleness liveContentType
+    // works around above.
+    generate(undefined, patternKey);
+  }
+  function randomizePattern() {
+    setPatternLock(null);
+    generate(undefined, null);
+  }
   function liveCustomText(text) {
     setCustomText(text);
     const g = gRef.current;
@@ -1723,9 +1777,10 @@ function Visualizer() {
     }
     return null;
   }
-  async function generate(contentTypeOverride) {
+  async function generate(contentTypeOverride, patternOverrideArg) {
     if (gRef.current && gRef.current.audio) stopAudio(gRef.current.audio);
     const activeContentType = contentTypeOverride || contentType;
+    const activePattern = patternOverrideArg !== undefined ? patternOverrideArg : patternLock;
     const w = window.innerWidth,
       h = window.innerHeight;
     const palette = PALETTES[paletteIdx];
@@ -1735,7 +1790,7 @@ function Visualizer() {
     if (activeContentType === "draw" && drawCanvas) syncDrawSnapshot();
     const imageSource = activeContentType === "draw" ? drawSnapshotRef.current : logoImageRef.current;
     const imageAspect = activeContentType === "draw" ? drawSnapshotRef.current ? drawSnapshotRef.current.height / drawSnapshotRef.current.width : 1 : logoAspectRef.current;
-    const cfg = makeConfig(activeContentType, palette, w, h, densityMult, speedMult, customText, imageSource, imageAspect);
+    const cfg = makeConfig(activeContentType, palette, w, h, densityMult, speedMult, customText, imageSource, imageAspect, activePattern);
     cfg.width = w;
     cfg.height = h;
     cfg.lastTime = performance.now();
@@ -2068,7 +2123,28 @@ function Visualizer() {
   }, "Undo"), /*#__PURE__*/React.createElement("button", {
     onClick: clearDrawing,
     style: mixerTinyBtnStyle(false)
-  }, "Clear"))))), recordStatus && /*#__PURE__*/React.createElement("div", {
+  }, "Clear")))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      flexDirection: "column",
+      gap: 8
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: mixerLabelStyle
+  }, "Pattern"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: 6,
+      flexWrap: "wrap"
+    }
+  }, /*#__PURE__*/React.createElement("button", {
+    onClick: randomizePattern,
+    style: mixerTinyBtnStyle(patternLock === null)
+  }, "Randomize"), PATTERN_OPTIONS.map(po => /*#__PURE__*/React.createElement("button", {
+    key: po.key,
+    onClick: () => livePattern(po.key),
+    style: mixerTinyBtnStyle(patternLock === po.key)
+  }, po.label))))), recordStatus && /*#__PURE__*/React.createElement("div", {
     style: recordStatusStyle
   }, recordStatus), !showControls && /*#__PURE__*/React.createElement("button", {
     onClick: e => {
@@ -2604,6 +2680,21 @@ try {
   root.render(/*#__PURE__*/React.createElement(Visualizer, null));
 } catch (err) {
   showFatalError(err && err.stack || String(err));
+}
+// Minimal service worker registration so the browser considers this
+// installable (Add to Home Screen / the install icon in Chrome's address
+// bar). It's a deliberate no-op -- it doesn't cache anything -- so edits to
+// this file always show up on reload instead of getting stuck behind a
+// stale cache.
+if ("serviceWorker" in navigator && window.isSecureContext) {
+  try {
+    const swSource = "self.addEventListener('install',()=>self.skipWaiting());" + "self.addEventListener('activate',e=>e.waitUntil(self.clients.claim()));" + "self.addEventListener('fetch',()=>{});";
+    const swBlob = new Blob([swSource], {
+      type: "text/javascript"
+    });
+    const swUrl = URL.createObjectURL(swBlob);
+    navigator.serviceWorker.register(swUrl).catch(() => {});
+  } catch (err) {}
 }
 </script>
 </body>
