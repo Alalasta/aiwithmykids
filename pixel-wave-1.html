@@ -1290,6 +1290,15 @@ function Visualizer() {
   const [autoVjOn, setAutoVjOn] = useState(false);
   const [autoVjIntervalVal, setAutoVjIntervalVal] = useState(45);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [presets, setPresets] = useState([]);
+  const [showSavePreset, setShowSavePreset] = useState(false);
+  const [presetNameInput, setPresetNameInput] = useState("");
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem("pixelwave-presets");
+      if (raw) setPresets(JSON.parse(raw));
+    } catch (e) {}
+  }, []);
   const sizeCanvas = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -1509,7 +1518,9 @@ function Visualizer() {
       // a real regenerate rather than an in-place content swap. Passing ct
       // directly sidesteps React's state batching (contentType in this
       // closure hasn't updated to the new value yet).
-      generate(ct);
+      generate({
+        contentType: ct
+      });
       return;
     }
     const pool = (customText || "").split("").filter(ch => ch.trim().length > 0);
@@ -1540,11 +1551,75 @@ function Visualizer() {
     // real regenerate rather than an in-place swap. Passing patternKey
     // directly avoids the same state-batching staleness liveContentType
     // works around above.
-    generate(undefined, patternKey);
+    generate({
+      pattern: patternKey
+    });
   }
   function randomizePattern() {
     setPatternLock(null);
-    generate(undefined, null);
+    generate({
+      pattern: null
+    });
+  }
+  function persistPresets(next) {
+    setPresets(next);
+    try {
+      localStorage.setItem("pixelwave-presets", JSON.stringify(next));
+    } catch (e) {}
+  }
+  function savePreset() {
+    const name = presetNameInput.trim();
+    if (!name) return;
+    const preset = {
+      id: Date.now() + "-" + Math.round(Math.random() * 1e6),
+      name,
+      paletteIdx,
+      contentType,
+      customText,
+      densityKey,
+      speedKey,
+      patternLock,
+      mixSpeed: mixSpeedVal,
+      mixBeat: mixBeatVal,
+      mixGlow: mixGlowVal,
+      trailOverrideVal,
+      kaleido: kaleidoOn,
+      kaleidoSeg: kaleidoSegVal
+    };
+    persistPresets([...presets, preset]);
+    setPresetNameInput("");
+    setShowSavePreset(false);
+  }
+  function deletePreset(id) {
+    persistPresets(presets.filter(p => p.id !== id));
+  }
+  function applyPreset(preset) {
+    setPaletteIdx(preset.paletteIdx);
+    setContentType(preset.contentType);
+    setCustomText(preset.customText || "");
+    setDensityKey(preset.densityKey);
+    setSpeedKey(preset.speedKey);
+    setPatternLock(preset.patternLock);
+    setMixSpeedVal(preset.mixSpeed);
+    setMixBeatVal(preset.mixBeat);
+    setMixGlowVal(preset.mixGlow);
+    setTrailOverrideVal(preset.trailOverrideVal);
+    setKaleidoOn(preset.kaleido);
+    setKaleidoSegVal(preset.kaleidoSeg);
+    generate({
+      contentType: preset.contentType,
+      pattern: preset.patternLock,
+      paletteIdx: preset.paletteIdx,
+      densityKey: preset.densityKey,
+      speedKey: preset.speedKey,
+      customText: preset.customText || "",
+      mixSpeed: preset.mixSpeed,
+      mixBeat: preset.mixBeat,
+      mixGlow: preset.mixGlow,
+      trailOverrideVal: preset.trailOverrideVal,
+      kaleido: preset.kaleido,
+      kaleidoSeg: preset.kaleidoSeg
+    });
   }
   function liveCustomText(text) {
     setCustomText(text);
@@ -1777,30 +1852,40 @@ function Visualizer() {
     }
     return null;
   }
-  async function generate(contentTypeOverride, patternOverrideArg) {
+  async function generate(overrides) {
+    overrides = overrides || {};
     if (gRef.current && gRef.current.audio) stopAudio(gRef.current.audio);
-    const activeContentType = contentTypeOverride || contentType;
-    const activePattern = patternOverrideArg !== undefined ? patternOverrideArg : patternLock;
+    const activeContentType = overrides.contentType !== undefined ? overrides.contentType : contentType;
+    const activePattern = overrides.pattern !== undefined ? overrides.pattern : patternLock;
+    const activePaletteIdx = overrides.paletteIdx !== undefined ? overrides.paletteIdx : paletteIdx;
+    const activeDensityKey = overrides.densityKey !== undefined ? overrides.densityKey : densityKey;
+    const activeSpeedKey = overrides.speedKey !== undefined ? overrides.speedKey : speedKey;
+    const activeCustomText = overrides.customText !== undefined ? overrides.customText : customText;
+    const activeTrailOverrideVal = overrides.trailOverrideVal !== undefined ? overrides.trailOverrideVal : trailOverrideVal;
     const w = window.innerWidth,
       h = window.innerHeight;
-    const palette = PALETTES[paletteIdx];
-    const densityMult = DENSITY_OPTIONS.find(d => d.key === densityKey).mult;
-    const speedMult = SPEED_OPTIONS.find(s => s.key === speedKey).mult;
+    const palette = PALETTES[activePaletteIdx];
+    const densityMult = DENSITY_OPTIONS.find(d => d.key === activeDensityKey).mult;
+    const speedMult = SPEED_OPTIONS.find(s => s.key === activeSpeedKey).mult;
     const drawCanvas = drawCanvasRef.current;
     if (activeContentType === "draw" && drawCanvas) syncDrawSnapshot();
-    const imageSource = activeContentType === "draw" ? drawSnapshotRef.current : logoImageRef.current;
-    const imageAspect = activeContentType === "draw" ? drawSnapshotRef.current ? drawSnapshotRef.current.height / drawSnapshotRef.current.width : 1 : logoAspectRef.current;
-    const cfg = makeConfig(activeContentType, palette, w, h, densityMult, speedMult, customText, imageSource, imageAspect, activePattern);
+    let imageSource = activeContentType === "draw" ? drawSnapshotRef.current : logoImageRef.current;
+    let imageAspect = activeContentType === "draw" ? drawSnapshotRef.current ? drawSnapshotRef.current.height / drawSnapshotRef.current.width : 1 : logoAspectRef.current;
+    if (overrides.logoImageEl) {
+      imageSource = overrides.logoImageEl;
+      imageAspect = overrides.logoAspect || 1;
+    }
+    const cfg = makeConfig(activeContentType, palette, w, h, densityMult, speedMult, activeCustomText, imageSource, imageAspect, activePattern);
     cfg.width = w;
     cfg.height = h;
     cfg.lastTime = performance.now();
     if (audioMode === "tap" && bpm) cfg.manualBpm = bpm;
-    cfg.mixSpeed = mixSpeedVal;
-    cfg.mixBeatBoost = mixBeatVal;
-    cfg.mixGlow = mixGlowVal;
-    cfg.trailOverride = trailOverrideVal === "auto" ? null : trailOverrideVal === "on";
-    cfg.kaleido = kaleidoOn;
-    cfg.kaleidoSegments = kaleidoSegVal;
+    cfg.mixSpeed = overrides.mixSpeed !== undefined ? overrides.mixSpeed : mixSpeedVal;
+    cfg.mixBeatBoost = overrides.mixBeat !== undefined ? overrides.mixBeat : mixBeatVal;
+    cfg.mixGlow = overrides.mixGlow !== undefined ? overrides.mixGlow : mixGlowVal;
+    cfg.trailOverride = activeTrailOverrideVal === "auto" ? null : activeTrailOverrideVal === "on";
+    cfg.kaleido = overrides.kaleido !== undefined ? overrides.kaleido : kaleidoOn;
+    cfg.kaleidoSegments = overrides.kaleidoSeg !== undefined ? overrides.kaleidoSeg : kaleidoSegVal;
     gRef.current = cfg;
     setPaused(false);
     setScreen("running");
@@ -1943,7 +2028,70 @@ function Visualizer() {
   }, "Hide")), showMixer && /*#__PURE__*/React.createElement("div", {
     style: mixerPanelStyle,
     onClick: e => e.stopPropagation()
-  }, /*#__PURE__*/React.createElement(MixerSlider, {
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      flexDirection: "column",
+      gap: 8
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: mixerLabelStyle
+  }, "Presets"), presets.length > 0 && /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: 6,
+      flexWrap: "wrap"
+    }
+  }, presets.map(preset => /*#__PURE__*/React.createElement("div", {
+    key: preset.id,
+    style: {
+      display: "flex",
+      alignItems: "center",
+      gap: 4
+    }
+  }, /*#__PURE__*/React.createElement("button", {
+    onClick: () => applyPreset(preset),
+    style: mixerTinyBtnStyle(false)
+  }, preset.name), /*#__PURE__*/React.createElement("button", {
+    onClick: () => deletePreset(preset.id),
+    "aria-label": "Delete preset",
+    style: {
+      ...mixerTinyBtnStyle(false),
+      padding: "6px 8px",
+      color: "rgba(255,255,255,0.4)"
+    }
+  }, "×")))), showSavePreset ? /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: 6,
+      alignItems: "center"
+    }
+  }, /*#__PURE__*/React.createElement("input", {
+    type: "text",
+    value: presetNameInput,
+    maxLength: 24,
+    placeholder: "Preset name",
+    onChange: e => setPresetNameInput(e.target.value),
+    style: {
+      ...customTextInputStyle,
+      marginBottom: 0,
+      flex: 1,
+      padding: "8px 10px",
+      fontSize: 12
+    }
+  }), /*#__PURE__*/React.createElement("button", {
+    onClick: savePreset,
+    style: mixerTinyBtnStyle(true)
+  }, "Save"), /*#__PURE__*/React.createElement("button", {
+    onClick: () => {
+      setShowSavePreset(false);
+      setPresetNameInput("");
+    },
+    style: mixerTinyBtnStyle(false)
+  }, "Cancel")) : /*#__PURE__*/React.createElement("button", {
+    onClick: () => setShowSavePreset(true),
+    style: mixerTinyBtnStyle(false)
+  }, "+ Save Current Look")), /*#__PURE__*/React.createElement(MixerSlider, {
     label: "Speed",
     min: 0.3,
     max: 2.5,
