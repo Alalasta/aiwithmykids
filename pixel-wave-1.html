@@ -356,6 +356,27 @@ const {
   useRef,
   useCallback
 } = React;
+// Channel name shared between the control window and any Stage output
+// window(s) it opens. Anything posted here is same-browser only (never
+// leaves the device), which is exactly what we want for a control -> stage
+// link with zero setup.
+const STAGE_SYNC_CHANNEL = "pixelwave-stage-sync-v1";
+// Turns an <img> or <canvas> element into a portable data URL so it can be
+// sent across the BroadcastChannel to the Stage window, which has no access
+// to the control window's DOM elements or blob URLs.
+function elementToDataURL(el) {
+  try {
+    if (!el) return null;
+    if (el.tagName === "CANVAS") return el.toDataURL("image/png");
+    const c = document.createElement("canvas");
+    c.width = el.naturalWidth || el.width || 1;
+    c.height = el.naturalHeight || el.height || 1;
+    c.getContext("2d").drawImage(el, 0, 0);
+    return c.toDataURL("image/png");
+  } catch (e) {
+    return null;
+  }
+}
 const PALETTES = [{
   name: "Neon",
   colors: ["#ff006e", "#fb5607", "#ffbe0b", "#8338ec", "#3a86ff"]
@@ -1242,6 +1263,205 @@ function applyLivePalette(g, palette) {
     });
   }
 }
+// The Stage output: what actually gets projected. No setup screen, no
+// toolbar, no mixer, no buttons -- just a fullscreen canvas that renders
+// whatever the control window (Visualizer, below) broadcasts to it over
+// BroadcastChannel. This is the whole point: the audience only ever sees
+// this, never the controls.
+function StageOutput() {
+  const canvasRef = useRef(null);
+  const bufferCanvasRef = useRef(null);
+  const rafRef = useRef(null);
+  const gRef = useRef(null);
+  const [paused, setPaused] = useState(false);
+  const [ready, setReady] = useState(false);
+  const [started, setStarted] = useState(false);
+  const sizeCanvas = useCallback(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const w = window.innerWidth,
+      h = window.innerHeight;
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    canvas.width = Math.floor(w * dpr);
+    canvas.height = Math.floor(h * dpr);
+    canvas.style.width = w + "px";
+    canvas.style.height = h + "px";
+    const ctx = canvas.getContext("2d");
+    if (ctx) ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    if (!bufferCanvasRef.current) bufferCanvasRef.current = document.createElement("canvas");
+    const buf = bufferCanvasRef.current;
+    buf.width = Math.floor(w * dpr);
+    buf.height = Math.floor(h * dpr);
+    const bctx = buf.getContext("2d");
+    if (bctx) bctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    if (gRef.current) {
+      gRef.current.width = w;
+      gRef.current.height = h;
+    }
+  }, []);
+  useEffect(() => {
+    sizeCanvas();
+    window.addEventListener("resize", sizeCanvas);
+    return () => window.removeEventListener("resize", sizeCanvas);
+  }, [sizeCanvas]);
+  function buildFromPayload(payload, imgEl) {
+    const w = window.innerWidth,
+      h = window.innerHeight;
+    const palette = PALETTES[payload.paletteIdx] || PALETTES[0];
+    const densityOpt = DENSITY_OPTIONS.find(d => d.key === payload.densityKey) || DENSITY_OPTIONS[1];
+    const speedOpt = SPEED_OPTIONS.find(s => s.key === payload.speedKey) || SPEED_OPTIONS[1];
+    const cfg = makeConfig(payload.contentType, palette, w, h, densityOpt.mult, speedOpt.mult, payload.customText, imgEl || null, payload.imageAspect || 1, payload.pattern);
+    cfg.width = w;
+    cfg.height = h;
+    cfg.lastTime = performance.now();
+    cfg.mixSpeed = payload.mixSpeed;
+    cfg.mixBeatBoost = payload.mixBeat;
+    cfg.mixGlow = payload.mixGlow;
+    cfg.trailOverride = payload.trailOverrideVal === "auto" ? null : payload.trailOverrideVal === "on";
+    cfg.kaleido = payload.kaleido;
+    cfg.kaleidoSegments = payload.kaleidoSeg;
+    gRef.current = cfg;
+    setReady(true);
+  }
+  useEffect(() => {
+    if (!("BroadcastChannel" in window)) return;
+    const bc = new BroadcastChannel(STAGE_SYNC_CHANNEL);
+    bc.onmessage = e => {
+      const msg = e.data || {};
+      const g = gRef.current;
+      if (msg.type === "regenerate") {
+        if (msg.payload.imageDataUrl) {
+          const img = new Image();
+          img.onload = () => buildFromPayload(msg.payload, img);
+          img.src = msg.payload.imageDataUrl;
+        } else {
+          buildFromPayload(msg.payload, null);
+        }
+      } else if (msg.type === "mixer") {
+        if (g) Object.assign(g, msg.payload);
+      } else if (msg.type === "palette") {
+        if (g) applyLivePalette(g, PALETTES[msg.payload.idx]);
+      } else if (msg.type === "contentSwap") {
+        if (!g) return;
+        const ct = msg.payload.ct;
+        const pool = (msg.payload.customText || "").split("").filter(ch => ch.trim().length > 0);
+        function apply(imgEl, imgAspect) {
+          g.contentType = ct;
+          g.customPool = pool;
+          g.logoImage = imgEl || null;
+          g.logoAspect = imgAspect || 1;
+          g.particles.forEach(p => {
+            p.content = randomContent(ct, pool);
+            const size = ct === "logo" || ct === "draw" ? rand(34, 64) : rand(18, 42);
+            p.size = size;
+            p.baseSize = size;
+          });
+        }
+        if (msg.payload.imageDataUrl) {
+          const img = new Image();
+          img.onload = () => apply(img, msg.payload.imageAspect);
+          img.src = msg.payload.imageDataUrl;
+        } else {
+          apply(null, 1);
+        }
+      } else if (msg.type === "flash") {
+        if (g) g.beatPulse = 1;
+      } else if (msg.type === "pause") {
+        setPaused(!!msg.payload.paused);
+      }
+    };
+    return () => bc.close();
+  }, []);
+  useEffect(() => {
+    if (paused) {
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+      return;
+    }
+    function loop(now) {
+      const g = gRef.current;
+      if (g) {
+        let dt = (now - g.lastTime) / 1000;
+        g.lastTime = now;
+        dt = clamp(dt, 0, 0.05);
+        updateVisual(g, dt, now);
+        const canvas = canvasRef.current;
+        if (canvas) {
+          const ctx = canvas.getContext("2d");
+          if (ctx) {
+            if (g.kaleido && bufferCanvasRef.current) {
+              const bctx = bufferCanvasRef.current.getContext("2d");
+              if (bctx) {
+                drawVisual(bctx, g);
+                drawKaleidoscope(ctx, bufferCanvasRef.current, g.width, g.height, g.kaleidoSegments || 6);
+              }
+            } else {
+              drawVisual(ctx, g);
+            }
+          }
+        }
+      }
+      rafRef.current = requestAnimationFrame(loop);
+    }
+    rafRef.current = requestAnimationFrame(loop);
+    return () => {
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+    };
+  }, [paused]);
+  function handleStart() {
+    setStarted(true);
+    try {
+      const el = document.documentElement;
+      const req = el.requestFullscreen || el.webkitRequestFullscreen;
+      if (req) req.call(el);
+    } catch (e) {}
+  }
+  return /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: "fixed",
+      inset: 0,
+      width: "100%",
+      height: "100dvh",
+      overflow: "hidden",
+      background: "#000",
+      cursor: "none"
+    },
+    onClick: !started ? handleStart : undefined
+  }, /*#__PURE__*/React.createElement("canvas", {
+    ref: canvasRef,
+    style: {
+      position: "absolute",
+      top: 0,
+      left: 0
+    }
+  }), !started && /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: "absolute",
+      inset: 0,
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      color: "rgba(255,255,255,0.35)",
+      fontSize: 13,
+      letterSpacing: 1,
+      textTransform: "uppercase",
+      fontFamily: "-apple-system,sans-serif",
+      cursor: "pointer"
+    }
+  }, "Tap to start stage display"), started && !ready && /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: "absolute",
+      inset: 0,
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      color: "rgba(255,255,255,0.2)",
+      fontSize: 12,
+      letterSpacing: 1,
+      textTransform: "uppercase",
+      fontFamily: "-apple-system,sans-serif"
+    }
+  }, "Waiting for control\u2026"));
+}
 function Visualizer() {
   const canvasRef = useRef(null);
   const bufferCanvasRef = useRef(null);
@@ -1256,6 +1476,8 @@ function Visualizer() {
   const drawCanvasRef = useRef(null);
   const drawSnapshotRef = useRef(null);
   const drawUndoStackRef = useRef([]);
+  const bcRef = useRef(null);
+  const stageWindowRef = useRef(null);
   const isDrawingRef = useRef(false);
   const lastPointRef = useRef(null);
   const wakeLockRef = useRef(null);
@@ -1290,6 +1512,8 @@ function Visualizer() {
   const [autoVjOn, setAutoVjOn] = useState(false);
   const [autoVjIntervalVal, setAutoVjIntervalVal] = useState(45);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [stageOpen, setStageOpen] = useState(false);
+  const [previewOff, setPreviewOff] = useState(false);
   const [presets, setPresets] = useState([]);
   const [showSavePreset, setShowSavePreset] = useState(false);
   const [presetNameInput, setPresetNameInput] = useState("");
@@ -1304,7 +1528,7 @@ function Visualizer() {
     if (!canvas) return;
     const w = window.innerWidth,
       h = window.innerHeight;
-    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const dpr = Math.min(window.devicePixelRatio || 1, stageOpen ? 1 : 2);
     dprRef.current = dpr;
     canvas.width = Math.floor(w * dpr);
     canvas.height = Math.floor(h * dpr);
@@ -1323,7 +1547,7 @@ function Visualizer() {
       gRef.current.width = w;
       gRef.current.height = h;
     }
-  }, []);
+  }, [stageOpen]);
   useEffect(() => {
     sizeCanvas();
     window.addEventListener("resize", sizeCanvas);
@@ -1372,6 +1596,65 @@ function Visualizer() {
       document.removeEventListener("webkitfullscreenchange", handleFsChange);
     };
   }, []);
+  useEffect(() => {
+    if ("BroadcastChannel" in window) {
+      bcRef.current = new BroadcastChannel(STAGE_SYNC_CHANNEL);
+    }
+    return () => {
+      if (bcRef.current) bcRef.current.close();
+    };
+  }, []);
+  useEffect(() => {
+    const id = setInterval(() => {
+      const win = stageWindowRef.current;
+      setStageOpen(!!win && !win.closed);
+    }, 1500);
+    return () => clearInterval(id);
+  }, []);
+  function bcSend(type, payload) {
+    if (bcRef.current) {
+      try {
+        bcRef.current.postMessage({
+          type,
+          payload
+        });
+      } catch (e) {}
+    }
+  }
+  function broadcastCurrentState() {
+    const g = gRef.current;
+    if (!g) return;
+    bcSend("regenerate", {
+      contentType: g.contentType,
+      pattern: g.pattern,
+      paletteIdx,
+      densityKey,
+      speedKey,
+      customText,
+      mixSpeed: g.mixSpeed,
+      mixBeat: g.mixBeatBoost,
+      mixGlow: g.mixGlow,
+      trailOverrideVal,
+      kaleido: g.kaleido,
+      kaleidoSeg: g.kaleidoSegments,
+      imageDataUrl: g.contentType === "logo" || g.contentType === "draw" ? elementToDataURL(g.logoImage) : null,
+      imageAspect: g.logoAspect
+    });
+  }
+  function openStageWindow() {
+    const url = location.origin + location.pathname + "?stage=1";
+    const win = window.open(url, "pixelwave-stage");
+    if (win) {
+      stageWindowRef.current = win;
+      setStageOpen(true);
+      // BroadcastChannel only delivers messages to listeners that already
+      // exist at send time -- a freshly opened Stage window missed
+      // whatever was already running. Re-send the current state a couple
+      // of times while the new window finishes loading and connects.
+      setTimeout(broadcastCurrentState, 1000);
+      setTimeout(broadcastCurrentState, 2500);
+    }
+  }
   async function enableMicrophone() {
     setAudioStatus("Requesting microphone access…");
     try {
@@ -1404,10 +1687,12 @@ function Visualizer() {
       logoAspectRef.current = img.naturalHeight / img.naturalWidth || 1;
       setLogoPreviewUrl(url);
       setLogoStatus("Logo ready ✓");
-      const g = gRef.current;
-      if (g && g.contentType === "logo") {
-        g.logoImage = img;
-        g.logoAspect = logoAspectRef.current;
+      // Checking the React state (the person's actual selection) rather
+      // than g.contentType covers the deferred case too: if they picked
+      // Image before uploading anything, this is what finally performs
+      // the switch now that there's a real picture to show.
+      if (contentType === "logo" && gRef.current) {
+        applyLiveContentSwap("logo", img, logoAspectRef.current);
       }
     };
     img.onerror = () => {
@@ -1464,10 +1749,12 @@ function Visualizer() {
     snap.width = canvas.width;
     snap.height = canvas.height;
     snap.getContext("2d").drawImage(canvas, 0, 0);
-    const g = gRef.current;
-    if (g && g.contentType === "draw") {
-      g.logoImage = snap;
-      g.logoAspect = snap.height / snap.width || 1;
+    // Same deferred-switch logic as onLogoChosen: check the person's
+    // actual selection, not just whether it was already active, so the
+    // first stroke performs the switch if Draw was picked before anything
+    // was drawn.
+    if (contentType === "draw" && gRef.current) {
+      applyLiveContentSwap("draw", snap, snap.height / snap.width || 1);
     }
   }
   function handleDrawEnd() {
@@ -1492,22 +1779,59 @@ function Visualizer() {
   function setMixSpeed(v) {
     setMixSpeedVal(v);
     if (gRef.current) gRef.current.mixSpeed = v;
+    bcSend("mixer", {
+      mixSpeed: v
+    });
   }
   function setMixBeat(v) {
     setMixBeatVal(v);
     if (gRef.current) gRef.current.mixBeatBoost = v;
+    bcSend("mixer", {
+      mixBeatBoost: v
+    });
   }
   function setMixGlow(v) {
     setMixGlowVal(v);
     if (gRef.current) gRef.current.mixGlow = v;
+    bcSend("mixer", {
+      mixGlow: v
+    });
   }
   function setTrailMode(mode) {
     setTrailOverrideVal(mode);
-    if (gRef.current) gRef.current.trailOverride = mode === "auto" ? null : mode === "on";
+    const trailOverride = mode === "auto" ? null : mode === "on";
+    if (gRef.current) gRef.current.trailOverride = trailOverride;
+    bcSend("mixer", {
+      trailOverride
+    });
   }
   function livePalette(i) {
     setPaletteIdx(i);
     if (gRef.current) applyLivePalette(gRef.current, PALETTES[i]);
+    bcSend("palette", {
+      idx: i
+    });
+  }
+  function applyLiveContentSwap(ct, imgSrc, imgAspect) {
+    const g = gRef.current;
+    if (!g) return;
+    const pool = (customText || "").split("").filter(ch => ch.trim().length > 0);
+    g.contentType = ct;
+    g.customPool = pool;
+    g.logoImage = imgSrc || null;
+    g.logoAspect = imgAspect || 1;
+    g.particles.forEach(p => {
+      p.content = randomContent(ct, pool);
+      const size = ct === "logo" || ct === "draw" ? rand(34, 64) : rand(18, 42);
+      p.size = size;
+      p.baseSize = size;
+    });
+    bcSend("contentSwap", {
+      ct,
+      customText,
+      imageDataUrl: ct === "logo" || ct === "draw" ? elementToDataURL(imgSrc) : null,
+      imageAspect: imgAspect || 1
+    });
   }
   function liveContentType(ct) {
     setContentType(ct);
@@ -1523,26 +1847,22 @@ function Visualizer() {
       });
       return;
     }
-    const pool = (customText || "").split("").filter(ch => ch.trim().length > 0);
-    let imgSrc = null,
-      imgAspect = 1;
     if (ct === "logo") {
-      imgSrc = logoImageRef.current;
-      imgAspect = logoAspectRef.current;
-    } else if (ct === "draw") {
-      imgSrc = drawSnapshotRef.current;
-      imgAspect = drawSnapshotRef.current ? drawSnapshotRef.current.height / drawSnapshotRef.current.width : 1;
+      // Nothing uploaded yet -- leave whatever's currently showing alone
+      // instead of collapsing to placeholder circles. The mixer button
+      // still highlights "Image" so the selection is visible; the actual
+      // switch happens the moment onLogoChosen gets a real picture.
+      if (!logoImageRef.current) return;
+      applyLiveContentSwap(ct, logoImageRef.current, logoAspectRef.current);
+      return;
     }
-    g.contentType = ct;
-    g.customPool = pool;
-    g.logoImage = imgSrc;
-    g.logoAspect = imgAspect;
-    g.particles.forEach(p => {
-      p.content = randomContent(ct, pool);
-      const size = ct === "logo" || ct === "draw" ? rand(34, 64) : rand(18, 42);
-      p.size = size;
-      p.baseSize = size;
-    });
+    if (ct === "draw") {
+      // Same deal -- wait for an actual stroke before switching.
+      if (!drawSnapshotRef.current) return;
+      applyLiveContentSwap(ct, drawSnapshotRef.current, drawSnapshotRef.current.height / drawSnapshotRef.current.width || 1);
+      return;
+    }
+    applyLiveContentSwap(ct, null, 1);
   }
   function livePattern(patternKey) {
     setPatternLock(patternKey);
@@ -1630,18 +1950,31 @@ function Visualizer() {
     g.particles.forEach(p => {
       p.content = randomContent("custom", pool);
     });
+    bcSend("contentSwap", {
+      ct: "custom",
+      customText: text,
+      imageDataUrl: null,
+      imageAspect: 1
+    });
   }
   function setKaleido(on) {
     setKaleidoOn(on);
     if (gRef.current) gRef.current.kaleido = on;
+    bcSend("mixer", {
+      kaleido: on
+    });
   }
   function setKaleidoSeg(v) {
     const seg = Math.round(v);
     setKaleidoSegVal(seg);
     if (gRef.current) gRef.current.kaleidoSegments = seg;
+    bcSend("mixer", {
+      kaleidoSegments: seg
+    });
   }
   function triggerFlash() {
     if (gRef.current) gRef.current.beatPulse = 1;
+    bcSend("flash", {});
   }
   async function enableCamera() {
     setAudioStatus("Requesting camera access…");
@@ -1890,6 +2223,22 @@ function Visualizer() {
     setPaused(false);
     setScreen("running");
     requestWakeLock();
+    bcSend("regenerate", {
+      contentType: activeContentType,
+      pattern: cfg.pattern,
+      paletteIdx: activePaletteIdx,
+      densityKey: activeDensityKey,
+      speedKey: activeSpeedKey,
+      customText: activeCustomText,
+      mixSpeed: cfg.mixSpeed,
+      mixBeat: cfg.mixBeatBoost,
+      mixGlow: cfg.mixGlow,
+      trailOverrideVal: activeTrailOverrideVal,
+      kaleido: cfg.kaleido,
+      kaleidoSeg: cfg.kaleidoSegments,
+      imageDataUrl: activeContentType === "logo" || activeContentType === "draw" ? elementToDataURL(imageSource) : null,
+      imageAspect
+    });
     const audio = await setupAudio();
     if (gRef.current === cfg) {
       cfg.audio = audio;
@@ -1900,7 +2249,7 @@ function Visualizer() {
   const generateRef = useRef(generate);
   generateRef.current = generate;
   useEffect(() => {
-    if (screen !== "running" || paused) {
+    if (screen !== "running" || paused || previewOff) {
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
       return;
     }
@@ -1935,7 +2284,7 @@ function Visualizer() {
     return () => {
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
     };
-  }, [screen, paused]);
+  }, [screen, paused, previewOff]);
   useEffect(() => {
     if (!autoVjOn || screen !== "running" || paused) return;
     const id = setInterval(() => {
@@ -1968,7 +2317,23 @@ function Visualizer() {
       top: 0,
       left: 0
     }
-  }), /*#__PURE__*/React.createElement("video", {
+  }), previewOff && screen === "running" && /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: "absolute",
+      inset: 0,
+      background: "#050505",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      color: "rgba(255,255,255,0.3)",
+      fontSize: 12,
+      letterSpacing: 1,
+      textTransform: "uppercase",
+      textAlign: "center",
+      padding: 20,
+      pointerEvents: "none"
+    }
+  }, "Preview off \u2014 stage is still live"), /*#__PURE__*/React.createElement("video", {
     ref: camVideoRef,
     muted: true,
     playsInline: true,
@@ -1984,7 +2349,12 @@ function Visualizer() {
     style: toolbarStyle,
     onClick: e => e.stopPropagation()
   }, /*#__PURE__*/React.createElement("button", {
-    onClick: () => setPaused(p => !p),
+    onClick: () => setPaused(p => {
+      bcSend("pause", {
+        paused: !p
+      });
+      return !p;
+    }),
     style: toolbarBtnStyle
   }, paused ? "Resume" : "Pause"), /*#__PURE__*/React.createElement("div", {
     style: toolbarDividerStyle
@@ -2008,6 +2378,22 @@ function Visualizer() {
       color: isFullscreen ? "#C6FF3D" : "#fff"
     }
   }, isFullscreen ? "⤢ Exit FS" : "⛶ Fullscreen"), /*#__PURE__*/React.createElement("div", {
+    style: toolbarDividerStyle
+  }), /*#__PURE__*/React.createElement("button", {
+    onClick: openStageWindow,
+    style: {
+      ...toolbarBtnStyle,
+      color: stageOpen ? "#C6FF3D" : "#fff"
+    }
+  }, stageOpen ? "📽 Stage ✓" : "📽 Open Stage"), /*#__PURE__*/React.createElement("div", {
+    style: toolbarDividerStyle
+  }), /*#__PURE__*/React.createElement("button", {
+    onClick: () => setPreviewOff(v => !v),
+    style: {
+      ...toolbarBtnStyle,
+      color: previewOff ? "#C6FF3D" : "#fff"
+    }
+  }, previewOff ? "👁 Preview Off" : "👁 Preview On"), /*#__PURE__*/React.createElement("div", {
     style: toolbarDividerStyle
   }), /*#__PURE__*/React.createElement("button", {
     onClick: () => isRecording ? stopRecording() : startRecording(),
@@ -2828,8 +3214,9 @@ const generateBtnStyle = {
   letterSpacing: 1
 };
 try {
+  const isStageOutput = new URLSearchParams(window.location.search).get("stage") === "1";
   const root = ReactDOM.createRoot(document.getElementById("root"));
-  root.render(/*#__PURE__*/React.createElement(Visualizer, null));
+  root.render(/*#__PURE__*/React.createElement(isStageOutput ? StageOutput : Visualizer, null));
 } catch (err) {
   showFatalError(err && err.stack || String(err));
 }
