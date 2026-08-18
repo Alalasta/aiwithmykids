@@ -1080,15 +1080,12 @@ function updateVisual(g, dt, nowMs) {
       g.audio = null;
     }
   } else if (g.manualBpm) {
-    // Tap-tempo mode: no real audio, so we drive a synthetic beat clock
-    // off the BPM the user tapped in.
+    // Tap-tempo mode: just tracks the BPM the person tapped in for display
+    // and pacing purposes. It deliberately does not auto-trigger beatPulse
+    // -- that's reserved for the manual Flash button now, so tap tempo
+    // doesn't strobe on every beat on its own.
     const interval = 60 / g.manualBpm;
-    g.bpmClock = (g.bpmClock || 0) + dt;
-    if (g.bpmClock >= interval) {
-      g.bpmClock -= interval;
-      g.beatPulse = 1;
-    }
-    speedFactor *= 1 + g.beatPulse * 0.3;
+    g.bpmClock = ((g.bpmClock || 0) + dt) % interval;
   }
   g.beatPulse = Math.max(0, (g.beatPulse || 0) - dt * 2.4);
   const scaledDt = dt * speedFactor * (g.mixSpeed || 1);
@@ -1521,8 +1518,8 @@ function Visualizer() {
   const recordedChunksRef = useRef([]);
   const recordTimeoutRef = useRef(null);
   const [screen, setScreen] = useState("setup");
-  const [paletteIdx, setPaletteIdx] = useState(0);
-  const [contentType, setContentType] = useState("shapes");
+  const [paletteIdx, setPaletteIdx] = useState(6);
+  const [contentType, setContentType] = useState("numbers");
   const [patternLock, setPatternLock] = useState(null);
   const [customText, setCustomText] = useState("PIXELWAVE");
   const [densityKey, setDensityKey] = useState("normal");
@@ -1541,7 +1538,7 @@ function Visualizer() {
   const [mixSpeedVal, setMixSpeedVal] = useState(1);
   const [mixBeatVal, setMixBeatVal] = useState(1);
   const [mixGlowVal, setMixGlowVal] = useState(1);
-  const [trailOverrideVal, setTrailOverrideVal] = useState("auto");
+  const [trailOverrideVal, setTrailOverrideVal] = useState("off");
   const [kaleidoOn, setKaleidoOn] = useState(false);
   const [kaleidoSegVal, setKaleidoSegVal] = useState(6);
   const [autoVjOn, setAutoVjOn] = useState(false);
@@ -1916,6 +1913,49 @@ function Visualizer() {
       pattern: null
     });
   }
+  function liveDensity(key) {
+    setDensityKey(key);
+    generate({
+      densityKey: key
+    });
+  }
+  function liveSpeedKey(key) {
+    setSpeedKey(key);
+    generate({
+      speedKey: key
+    });
+  }
+  async function liveAudioMode(mode) {
+    setAudioMode(mode);
+    setAudioStatus("");
+    if (mode === "mic") await enableMicrophone();
+    if (mode === "cam") await enableCamera();
+    // Swaps just the audio pipeline on the currently running visual,
+    // leaving the pattern/particles alone -- unlike a content or pattern
+    // change, there's no reason switching where the reactivity comes from
+    // needs to interrupt the show. Passing mode directly (instead of
+    // relying on the audioMode state we just set) sidesteps the same
+    // state-batching staleness fixed elsewhere in this file.
+    const g = gRef.current;
+    if (!g) return;
+    if (g.audio) stopAudio(g.audio);
+    const audio = await setupAudio(mode);
+    if (gRef.current === g) {
+      g.audio = audio;
+      g.manualBpm = mode === "tap" && bpm ? bpm : null;
+    }
+  }
+  async function liveAudioFile(file) {
+    if (!file) return;
+    setAudioFile(file);
+    setAudioMode("file");
+    setAudioStatus("Selected: " + file.name);
+    const g = gRef.current;
+    if (!g) return;
+    if (g.audio) stopAudio(g.audio);
+    const audio = await setupAudio("file", file);
+    if (gRef.current === g) g.audio = audio;
+  }
   function persistPresets(next) {
     setPresets(next);
     try {
@@ -2043,7 +2083,11 @@ function Visualizer() {
       const intervals = [];
       for (let i = 1; i < taps.length; i++) intervals.push(taps[i] - taps[i - 1]);
       const avg = intervals.reduce((a, b) => a + b, 0) / intervals.length;
-      setBpm(Math.round(60000 / avg));
+      const newBpm = Math.round(60000 / avg);
+      setBpm(newBpm);
+      // Push it straight into the running visual too -- otherwise the
+      // tempo only ever took effect on the next full regenerate.
+      if (gRef.current) gRef.current.manualBpm = newBpm;
     }
   }
   async function requestWakeLock() {
@@ -2141,12 +2185,14 @@ function Visualizer() {
       setAudioStatus("Selected: " + file.name);
     }
   }
-  async function setupAudio() {
+  async function setupAudio(modeOverride, fileOverride) {
+    const mode = modeOverride || audioMode;
+    const file = fileOverride || audioFile;
     try {
-      if (audioMode === "file" && audioFile) {
+      if (mode === "file" && file) {
         const AC = window.AudioContext || window.webkitAudioContext;
         if (!AC) return null;
-        const el = new Audio(URL.createObjectURL(audioFile));
+        const el = new Audio(URL.createObjectURL(file));
         el.loop = true;
         const ctx = new AC();
         const src = ctx.createMediaElementSource(el);
@@ -2173,7 +2219,7 @@ function Visualizer() {
           recordDest
         };
       }
-      if (audioMode === "cam" && camStreamRef.current && camVideoRef.current) {
+      if (mode === "cam" && camStreamRef.current && camVideoRef.current) {
         const sampleCanvas = document.createElement("canvas");
         sampleCanvas.width = 24;
         sampleCanvas.height = 14;
@@ -2191,7 +2237,7 @@ function Visualizer() {
           prevBrightness: null
         };
       }
-      if (audioMode === "mic" && micStreamRef.current) {
+      if (mode === "mic" && micStreamRef.current) {
         const AC = window.AudioContext || window.webkitAudioContext;
         if (!AC) return null;
         const ctx = new AC();
@@ -2713,7 +2759,100 @@ function Visualizer() {
     key: po.key,
     onClick: () => livePattern(po.key),
     style: mixerTinyBtnStyle(patternLock === po.key)
-  }, po.label))))), recordStatus && /*#__PURE__*/React.createElement("div", {
+  }, po.label)))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      flexDirection: "column",
+      gap: 8
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: mixerLabelStyle
+  }, "Density"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: 6,
+      flexWrap: "wrap"
+    }
+  }, DENSITY_OPTIONS.map(d => /*#__PURE__*/React.createElement("button", {
+    key: d.key,
+    onClick: () => liveDensity(d.key),
+    style: mixerTinyBtnStyle(d.key === densityKey)
+  }, d.label)))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      flexDirection: "column",
+      gap: 8
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: mixerLabelStyle
+  }, "Base Speed"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: 6,
+      flexWrap: "wrap"
+    }
+  }, SPEED_OPTIONS.map(s => /*#__PURE__*/React.createElement("button", {
+    key: s.key,
+    onClick: () => liveSpeedKey(s.key),
+    style: mixerTinyBtnStyle(s.key === speedKey)
+  }, s.label)))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      flexDirection: "column",
+      gap: 8
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: mixerLabelStyle
+  }, "Audio Source"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: 6,
+      flexWrap: "wrap"
+    }
+  }, /*#__PURE__*/React.createElement("button", {
+    onClick: () => liveAudioMode("none"),
+    style: mixerTinyBtnStyle(audioMode === "none")
+  }, "None"), /*#__PURE__*/React.createElement("label", {
+    style: {
+      ...mixerTinyBtnStyle(audioMode === "file"),
+      cursor: "pointer"
+    }
+  }, "Upload", /*#__PURE__*/React.createElement("input", {
+    type: "file",
+    accept: "audio/*",
+    style: {
+      display: "none"
+    },
+    onChange: e => {
+      const f = e.target.files && e.target.files[0];
+      if (f) liveAudioFile(f);
+    }
+  })), /*#__PURE__*/React.createElement("button", {
+    onClick: () => liveAudioMode("mic"),
+    style: mixerTinyBtnStyle(audioMode === "mic")
+  }, "Mic"), /*#__PURE__*/React.createElement("button", {
+    onClick: () => liveAudioMode("tap"),
+    style: mixerTinyBtnStyle(audioMode === "tap")
+  }, "Tap Tempo"), /*#__PURE__*/React.createElement("button", {
+    onClick: () => liveAudioMode("cam"),
+    style: mixerTinyBtnStyle(audioMode === "cam")
+  }, "Camera")), audioMode === "tap" && /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: 10,
+      alignItems: "center"
+    }
+  }, /*#__PURE__*/React.createElement("button", {
+    onClick: handleTap,
+    style: mixerTinyBtnStyle(false)
+  }, "TAP"), /*#__PURE__*/React.createElement("span", {
+    style: mixerValueStyle
+  }, bpm ? bpm + " BPM" : "--")), audioStatus && /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 11,
+      opacity: 0.5
+    }
+  }, audioStatus))), recordStatus && /*#__PURE__*/React.createElement("div", {
     style: recordStatusStyle
   }, recordStatus), !showControls && /*#__PURE__*/React.createElement("button", {
     onClick: e => {
