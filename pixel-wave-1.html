@@ -1116,6 +1116,30 @@ function updateVisual(g, dt, nowMs) {
     });
   }
 }
+// Scratch canvas reused every frame for tinting Draw content. Isolating the
+// composite operation here (rather than doing it directly on the main
+// canvas) keeps it from picking up the background or other particles that
+// happen to already be drawn underneath it.
+let drawTintScratch = null;
+function drawTintedDrawing(ctx, img, iw, ih, color) {
+  const size = Math.max(64, Math.ceil(Math.max(iw, ih)) + 8);
+  if (!drawTintScratch) drawTintScratch = document.createElement("canvas");
+  if (drawTintScratch.width < size || drawTintScratch.height < size) {
+    drawTintScratch.width = size;
+    drawTintScratch.height = size;
+  }
+  const tctx = drawTintScratch.getContext("2d");
+  tctx.clearRect(0, 0, size, size);
+  const ox = (size - iw) / 2,
+    oy = (size - ih) / 2;
+  tctx.globalCompositeOperation = "source-over";
+  tctx.drawImage(img, ox, oy, iw, ih);
+  tctx.globalCompositeOperation = "source-atop";
+  tctx.fillStyle = color;
+  tctx.fillRect(0, 0, size, size);
+  tctx.globalCompositeOperation = "source-over";
+  ctx.drawImage(drawTintScratch, 0, 0, size, size, -size / 2, -size / 2, size, size);
+}
 function drawVisual(ctx, g) {
   const w = g.width,
     h = g.height;
@@ -1176,7 +1200,7 @@ function drawVisual(ctx, g) {
     ctx.translate(p.x, p.y);
     ctx.rotate(p.rotation);
     if (p.glow) {
-      ctx.shadowColor = p.content.kind === "logo" ? "#ffffff" : p.color;
+      ctx.shadowColor = p.content.kind === "logo" && g.contentType !== "draw" ? "#ffffff" : p.color;
       ctx.shadowBlur = p.glow * 22;
     }
     if (p.content.kind === "shape") {
@@ -1187,7 +1211,18 @@ function drawVisual(ctx, g) {
       if (g.logoImage) {
         const iw = p.size,
           ih = p.size * g.logoAspect;
-        ctx.drawImage(g.logoImage, -iw / 2, -ih / 2, iw, ih);
+        if (g.contentType === "draw") {
+          // Draw content is a plain white-stroke sketch, so tint it with
+          // this particle's palette color rather than showing it flat
+          // white. Uploaded logos keep their original colors untouched.
+          // The tint has to happen on an isolated scratch canvas -- doing
+          // it directly on the shared main canvas would composite against
+          // the background and every previously drawn particle too,
+          // producing solid colored boxes instead of colored strokes.
+          drawTintedDrawing(ctx, g.logoImage, iw, ih, p.color);
+        } else {
+          ctx.drawImage(g.logoImage, -iw / 2, -ih / 2, iw, ih);
+        }
       } else {
         drawShape(ctx, "circle", p.size, p.color);
       }
