@@ -886,6 +886,7 @@ function makeConfig(contentType, palette, w, h, densityMult, speedMult, customTe
     time: 0,
     audio: null,
     beatPulse: 0,
+    flashPulse: 0,
     mixSpeed: 1,
     mixBeatBoost: 1,
     mixGlow: 1,
@@ -1058,14 +1059,27 @@ function sampleCamLevels(audio) {
 }
 function updateVisual(g, dt, nowMs) {
   let speedFactor = g.speedMultiplier || 1;
-  if (g.audio && g.audio.camMode) {
+  if (g.audio && g.audio.remote) {
+    // Stage window: no microphone/camera of its own, these numbers were
+    // streamed over from the Control window. Beat detection still runs
+    // locally off them so the pulse timing stays smooth and independent
+    // of message arrival jitter.
+    speedFactor *= 1 + g.audio.energy * 1.4;
+    if (detectBeat(g.audio, nowMs)) {
+      g.beatPulse = 1;
+      g.flashPulse = 1;
+    }
+  } else if (g.audio && g.audio.camMode) {
     try {
       const levels = sampleCamLevels(g.audio);
       g.audio.energy = levels.energy;
       g.audio.bass = levels.bass;
       g.audio.treble = levels.treble;
       speedFactor *= 1 + g.audio.energy * 1.4;
-      if (detectBeat(g.audio, nowMs)) g.beatPulse = 1;
+      if (detectBeat(g.audio, nowMs)) {
+        g.beatPulse = 1;
+        g.flashPulse = 1;
+      }
     } catch (err) {}
   } else if (g.audio) {
     try {
@@ -1075,19 +1089,28 @@ function updateVisual(g, dt, nowMs) {
       g.audio.bass = levels.bass;
       g.audio.treble = levels.treble;
       speedFactor *= 1 + g.audio.energy * 1.4;
-      if (detectBeat(g.audio, nowMs)) g.beatPulse = 1;
+      if (detectBeat(g.audio, nowMs)) {
+        g.beatPulse = 1;
+        g.flashPulse = 1;
+      }
     } catch (err) {
       g.audio = null;
     }
   } else if (g.manualBpm) {
-    // Tap-tempo mode: just tracks the BPM the person tapped in for display
-    // and pacing purposes. It deliberately does not auto-trigger beatPulse
-    // -- that's reserved for the manual Flash button now, so tap tempo
-    // doesn't strobe on every beat on its own.
+    // Tap-tempo mode: no real audio to analyze, so we drive a synthetic
+    // beat clock off the BPM the person tapped in. This triggers the same
+    // rhythmic punch (particle size, glow, ribbon width) that a real beat
+    // would -- but deliberately never the white screen flash, that stays
+    // reserved for the manual Flash button and real audio input.
     const interval = 60 / g.manualBpm;
-    g.bpmClock = ((g.bpmClock || 0) + dt) % interval;
+    g.bpmClock = (g.bpmClock || 0) + dt;
+    if (g.bpmClock >= interval) {
+      g.bpmClock -= interval;
+      g.beatPulse = 1;
+    }
   }
   g.beatPulse = Math.max(0, (g.beatPulse || 0) - dt * 2.4);
+  g.flashPulse = Math.max(0, (g.flashPulse || 0) - dt * 2.4);
   const scaledDt = dt * speedFactor * (g.mixSpeed || 1);
   g.time += scaledDt;
   const bassBoost = g.audio ? g.audio.bass * 0.5 : 0;
@@ -1233,8 +1256,8 @@ function drawVisual(ctx, g) {
     ctx.restore();
   });
   ctx.globalAlpha = 1;
-  if (g.beatPulse > 0.04) {
-    const flashAlpha = clamp(g.beatPulse * 0.16 * (g.mixBeatBoost || 1), 0, 0.4);
+  if (g.flashPulse > 0.04) {
+    const flashAlpha = clamp(g.flashPulse * 0.16 * (g.mixBeatBoost || 1), 0, 0.4);
     ctx.fillStyle = "rgba(255,255,255," + flashAlpha + ")";
     ctx.fillRect(0, 0, w, h);
   }
@@ -1397,7 +1420,29 @@ function StageOutput() {
           apply(null, 1);
         }
       } else if (msg.type === "flash") {
-        if (g) g.beatPulse = 1;
+        if (g) {
+          g.beatPulse = 1;
+          g.flashPulse = 1;
+        }
+      } else if (msg.type === "audioLevels") {
+        if (!g) return;
+        if (!msg.payload) {
+          g.audio = null;
+          return;
+        }
+        if (!g.audio || !g.audio.remote) {
+          g.audio = {
+            remote: true,
+            energy: 0,
+            bass: 0,
+            treble: 0,
+            bassAvg: null,
+            lastBeatTime: 0
+          };
+        }
+        g.audio.energy = msg.payload.energy;
+        g.audio.bass = msg.payload.bass;
+        g.audio.treble = msg.payload.treble;
       } else if (msg.type === "pause") {
         setPaused(!!msg.payload.paused);
       }
@@ -1545,6 +1590,7 @@ function Visualizer() {
   const [autoVjIntervalVal, setAutoVjIntervalVal] = useState(45);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [stageOpen, setStageOpen] = useState(false);
+  const [stageDisconnected, setStageDisconnected] = useState(false);
   const [previewOff, setPreviewOff] = useState(false);
   const [presets, setPresets] = useState([]);
   const [showSavePreset, setShowSavePreset] = useState(false);
@@ -1639,7 +1685,11 @@ function Visualizer() {
   useEffect(() => {
     const id = setInterval(() => {
       const win = stageWindowRef.current;
-      setStageOpen(!!win && !win.closed);
+      const nowOpen = !!win && !win.closed;
+      setStageOpen(prevOpen => {
+        if (prevOpen && !nowOpen) setStageDisconnected(true);
+        return nowOpen;
+      });
     }, 1500);
     return () => clearInterval(id);
   }, []);
@@ -1679,6 +1729,7 @@ function Visualizer() {
     if (win) {
       stageWindowRef.current = win;
       setStageOpen(true);
+      setStageDisconnected(false);
       // BroadcastChannel only delivers messages to listeners that already
       // exist at send time -- a freshly opened Stage window missed
       // whatever was already running. Re-send the current state a couple
@@ -2048,7 +2099,10 @@ function Visualizer() {
     });
   }
   function triggerFlash() {
-    if (gRef.current) gRef.current.beatPulse = 1;
+    if (gRef.current) {
+      gRef.current.beatPulse = 1;
+      gRef.current.flashPulse = 1;
+    }
     bcSend("flash", {});
   }
   async function enableCamera() {
@@ -2344,6 +2398,24 @@ function Visualizer() {
       g.lastTime = now;
       dt = clamp(dt, 0, 0.05);
       updateVisual(g, dt, now);
+      // Stream live audio reactivity to the Stage window, throttled to
+      // ~15/sec -- plenty smooth for visual reactivity, far less chatty
+      // than every animation frame. This works for any source (mic,
+      // uploaded song, or camera motion) since it just forwards the
+      // already-computed numbers, not the raw audio itself.
+      if (g.audio) {
+        if (!g._lastAudioBroadcast || now - g._lastAudioBroadcast > 66) {
+          g._lastAudioBroadcast = now;
+          bcSend("audioLevels", {
+            energy: g.audio.energy,
+            bass: g.audio.bass,
+            treble: g.audio.treble
+          });
+        }
+      } else if (g._hadAudio) {
+        bcSend("audioLevels", null);
+      }
+      g._hadAudio = !!g.audio;
       const canvas = canvasRef.current;
       if (canvas) {
         const ctx = canvas.getContext("2d");
@@ -2414,7 +2486,24 @@ function Visualizer() {
       padding: 20,
       pointerEvents: "none"
     }
-  }, "Preview off \u2014 stage is still live"), /*#__PURE__*/React.createElement("video", {
+  }, "Preview off \u2014 stage is still live"), stageDisconnected && screen === "running" && /*#__PURE__*/React.createElement("div", {
+    style: stageWarningBannerStyle,
+    onClick: e => e.stopPropagation()
+  }, /*#__PURE__*/React.createElement("span", null, "\u26A0 Stage disconnected \u2014 the projector isn't showing anything"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: 8
+    }
+  }, /*#__PURE__*/React.createElement("button", {
+    onClick: openStageWindow,
+    style: stageWarningBtnStyle
+  }, "Reopen"), /*#__PURE__*/React.createElement("button", {
+    onClick: () => setStageDisconnected(false),
+    style: {
+      ...stageWarningBtnStyle,
+      background: "transparent"
+    }
+  }, "\u2715"))), /*#__PURE__*/React.createElement("video", {
     ref: camVideoRef,
     muted: true,
     playsInline: true,
@@ -3235,6 +3324,35 @@ const recordStatusStyle = {
   fontWeight: 700,
   textTransform: "uppercase",
   letterSpacing: 0.5
+};
+const stageWarningBannerStyle = {
+  position: "absolute",
+  top: "max(16px, env(safe-area-inset-top))",
+  left: "50%",
+  transform: "translateX(-50%)",
+  maxWidth: "calc(100vw - 32px)",
+  display: "flex",
+  alignItems: "center",
+  gap: 14,
+  padding: "10px 16px",
+  borderRadius: 4,
+  background: "#ff4d4d",
+  color: "#0a0a0a",
+  fontSize: 12,
+  fontWeight: 700,
+  boxShadow: "0 8px 24px rgba(0,0,0,0.4)",
+  zIndex: 5
+};
+const stageWarningBtnStyle = {
+  fontSize: 11,
+  fontWeight: 800,
+  padding: "6px 12px",
+  borderRadius: 3,
+  border: "1px solid rgba(10,10,12,0.3)",
+  background: "rgba(10,10,12,0.15)",
+  color: "#0a0a0a",
+  cursor: "pointer",
+  whiteSpace: "nowrap"
 };
 const revealBtnStyle = {
   position: "absolute",
