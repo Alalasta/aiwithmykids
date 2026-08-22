@@ -361,6 +361,46 @@ const {
 // leaves the device), which is exactly what we want for a control -> stage
 // link with zero setup.
 const STAGE_SYNC_CHANNEL = "pixelwave-stage-sync-v1";
+// Every control a MIDI knob/fader/button can be learned onto. "range"
+// targets scale an incoming CC value (0-127) across [min, max] and feed it
+// to a live setter; "trigger" targets fire once on any note-on or CC>0.
+const MIDI_TARGETS = [{
+  key: "mixSpeed",
+  label: "Speed",
+  type: "range",
+  min: 0.3,
+  max: 2.5
+}, {
+  key: "mixBeat",
+  label: "Beat Punch",
+  type: "range",
+  min: 0,
+  max: 2
+}, {
+  key: "mixGlow",
+  label: "Glow",
+  type: "range",
+  min: 0,
+  max: 2
+}, {
+  key: "kaleidoSeg",
+  label: "Kaleido Segments",
+  type: "range",
+  min: 3,
+  max: 16
+}, {
+  key: "flash",
+  label: "Flash",
+  type: "trigger"
+}, {
+  key: "randomizePattern",
+  label: "Randomize Pattern",
+  type: "trigger"
+}, {
+  key: "shuffle",
+  label: "Shuffle",
+  type: "trigger"
+}];
 // Turns an <img> or <canvas> element into a portable data URL so it can be
 // sent across the BroadcastChannel to the Stage window, which has no access
 // to the control window's DOM elements or blob URLs.
@@ -1219,7 +1259,7 @@ function drawVisual(ctx, g) {
     ctx.globalAlpha = p.alpha != null ? p.alpha : 1;
     ctx.translate(p.x, p.y);
     ctx.rotate(p.rotation);
-    if (p.glow) {
+    if (p.glow > 0.04) {
       ctx.shadowColor = p.content.kind === "logo" && g.contentType !== "draw" ? "#ffffff" : p.color;
       ctx.shadowBlur = p.glow * 22;
     }
@@ -1455,6 +1495,11 @@ function StageOutput() {
       return;
     }
     function loop(now) {
+      if (now - lastFrame < targetFrameMs - 1) {
+        rafRef.current = requestAnimationFrame(loop);
+        return;
+      }
+      lastFrame = now;
       const g = gRef.current;
       if (g) {
         let dt = (now - g.lastTime) / 1000;
@@ -1479,6 +1524,8 @@ function StageOutput() {
       }
       rafRef.current = requestAnimationFrame(loop);
     }
+    const targetFrameMs = 1000 / 60;
+    let lastFrame = 0;
     rafRef.current = requestAnimationFrame(loop);
     return () => {
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
@@ -1591,6 +1638,11 @@ function Visualizer() {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [stageOpen, setStageOpen] = useState(false);
   const [stageDisconnected, setStageDisconnected] = useState(false);
+  const [midiStatus, setMidiStatus] = useState("");
+  const [midiMappings, setMidiMappings] = useState({});
+  const [midiLearning, setMidiLearning] = useState(null);
+  const midiMappingsRef = useRef({});
+  const midiLearningRef = useRef(null);
   const [previewOff, setPreviewOff] = useState(false);
   const [presets, setPresets] = useState([]);
   const [showSavePreset, setShowSavePreset] = useState(false);
@@ -1680,6 +1732,50 @@ function Visualizer() {
     }
     return () => {
       if (bcRef.current) bcRef.current.close();
+    };
+  }, []);
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem("pixelwave-midi-mappings");
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        midiMappingsRef.current = parsed;
+        setMidiMappings(parsed);
+      }
+    } catch (e) {}
+  }, []);
+  useEffect(() => {
+    if (!navigator.requestMIDIAccess) {
+      setMidiStatus("Web MIDI isn't supported in this browser");
+      return;
+    }
+    let cancelled = false;
+    let access = null;
+    function wireInputs(a) {
+      const names = [];
+      a.inputs.forEach(input => {
+        input.onmidimessage = e => handleMidiMessage(e);
+        names.push(input.name || "MIDI device");
+      });
+      if (!cancelled) {
+        setMidiStatus(names.length ? "Connected: " + names.join(", ") : "No MIDI devices found -- plug one in");
+      }
+    }
+    navigator.requestMIDIAccess().then(a => {
+      if (cancelled) return;
+      access = a;
+      wireInputs(a);
+      a.onstatechange = () => wireInputs(a);
+    }).catch(() => {
+      if (!cancelled) setMidiStatus("MIDI access denied");
+    });
+    return () => {
+      cancelled = true;
+      if (access) {
+        access.inputs.forEach(input => {
+          input.onmidimessage = null;
+        });
+      }
     };
   }, []);
   useEffect(() => {
@@ -2006,6 +2102,75 @@ function Visualizer() {
     if (g.audio) stopAudio(g.audio);
     const audio = await setupAudio("file", file);
     if (gRef.current === g) g.audio = audio;
+  }
+  function persistMidiMappings(next) {
+    midiMappingsRef.current = next;
+    setMidiMappings(next);
+    try {
+      localStorage.setItem("pixelwave-midi-mappings", JSON.stringify(next));
+    } catch (e) {}
+  }
+  function startMidiLearn(targetKey) {
+    midiLearningRef.current = targetKey;
+    setMidiLearning(targetKey);
+  }
+  function clearMidiMapping(targetKey) {
+    const next = {
+      ...midiMappingsRef.current
+    };
+    delete next[targetKey];
+    persistMidiMappings(next);
+  }
+  function applyMidiRangeValue(targetKey, raw127) {
+    const target = MIDI_TARGETS.find(t => t.key === targetKey);
+    if (!target || target.type !== "range") return;
+    const value = target.min + raw127 / 127 * (target.max - target.min);
+    if (targetKey === "mixSpeed") setMixSpeed(value);else if (targetKey === "mixBeat") setMixBeat(value);else if (targetKey === "mixGlow") setMixGlow(value);else if (targetKey === "kaleidoSeg") setKaleidoSeg(Math.round(value));
+  }
+  function applyMidiTrigger(targetKey) {
+    if (targetKey === "flash") triggerFlash();else if (targetKey === "randomizePattern") randomizePattern();else if (targetKey === "shuffle") generate();
+  }
+  function handleMidiMessage(e) {
+    const data = e.data;
+    if (!data || data.length < 2) return;
+    const statusByte = data[0];
+    const messageType = statusByte & 0xf0;
+    const number = data[1];
+    const value = data.length > 2 ? data[2] : 0;
+    const isCC = messageType === 0xb0;
+    const isNoteOn = messageType === 0x90 && value > 0;
+    if (midiLearningRef.current) {
+      if (isCC || isNoteOn) {
+        const next = {
+          ...midiMappingsRef.current,
+          [midiLearningRef.current]: isCC ? {
+            type: "cc",
+            number
+          } : {
+            type: "note",
+            number
+          }
+        };
+        persistMidiMappings(next);
+        midiLearningRef.current = null;
+        setMidiLearning(null);
+      }
+      return;
+    }
+    for (const key in midiMappingsRef.current) {
+      const mapping = midiMappingsRef.current[key];
+      if (!mapping) continue;
+      if (mapping.type === "cc" && isCC && mapping.number === number) {
+        const target = MIDI_TARGETS.find(t => t.key === key);
+        if (target && target.type === "trigger") {
+          if (value > 0) applyMidiTrigger(key);
+        } else {
+          applyMidiRangeValue(key, value);
+        }
+      } else if (mapping.type === "note" && isNoteOn && mapping.number === number) {
+        applyMidiTrigger(key);
+      }
+    }
   }
   function persistPresets(next) {
     setPresets(next);
@@ -2391,7 +2556,19 @@ function Visualizer() {
     const g = gRef.current;
     if (!g) return;
     g.lastTime = performance.now();
+    // Cap the render rate instead of letting it run at whatever the
+    // monitor's refresh rate is (120/144Hz screens were doing 2x+ more
+    // work than needed for no visible benefit). Once a Stage is connected
+    // this window is just a preview, so it drops further still to free up
+    // headroom for the window actually doing the real work.
+    const targetFrameMs = 1000 / (stageOpen ? 24 : 45);
+    let lastFrame = 0;
     function loop(now) {
+      if (now - lastFrame < targetFrameMs - 1) {
+        rafRef.current = requestAnimationFrame(loop);
+        return;
+      }
+      lastFrame = now;
       const g = gRef.current;
       if (!g) return;
       let dt = (now - g.lastTime) / 1000;
@@ -2437,7 +2614,7 @@ function Visualizer() {
     return () => {
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
     };
-  }, [screen, paused, previewOff]);
+  }, [screen, paused, previewOff, stageOpen]);
   useEffect(() => {
     if (!autoVjOn || screen !== "running" || paused) return;
     const id = setInterval(() => {
@@ -2729,18 +2906,15 @@ function Visualizer() {
     style: mixerRowStyle
   }, /*#__PURE__*/React.createElement("span", {
     style: mixerLabelStyle
-  }, "Palette"), /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: "flex",
-      gap: 6,
-      flexWrap: "wrap"
-    }
-  }, PALETTES.map((p, i) => /*#__PURE__*/React.createElement("button", {
-    key: p.name,
-    onClick: () => livePalette(i),
-    title: p.name,
-    style: mixerSwatchStyle(i === paletteIdx, p)
-  })))), /*#__PURE__*/React.createElement("div", {
+  }, "Palette"), /*#__PURE__*/React.createElement(Dropdown, {
+    value: String(paletteIdx),
+    onChange: v => livePalette(Number(v)),
+    options: PALETTES.map((p, i) => ({
+      value: String(i),
+      label: p.name
+    })),
+    compact: true
+  })), /*#__PURE__*/React.createElement("div", {
     style: {
       display: "flex",
       flexDirection: "column",
@@ -2748,17 +2922,15 @@ function Visualizer() {
     }
   }, /*#__PURE__*/React.createElement("span", {
     style: mixerLabelStyle
-  }, "Content"), /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: "flex",
-      gap: 6,
-      flexWrap: "wrap"
-    }
-  }, CONTENT_TYPES.map(c => /*#__PURE__*/React.createElement("button", {
-    key: c.key,
-    onClick: () => liveContentType(c.key),
-    style: mixerTinyBtnStyle(c.key === contentType)
-  }, c.label))), contentType === "logo" && /*#__PURE__*/React.createElement("div", {
+  }, "Content"), /*#__PURE__*/React.createElement(Dropdown, {
+    value: contentType,
+    onChange: v => liveContentType(v),
+    options: CONTENT_TYPES.map(c => ({
+      value: c.key,
+      label: c.label
+    })),
+    compact: true
+  }), contentType === "logo" && /*#__PURE__*/React.createElement("div", {
     style: {
       display: "flex",
       alignItems: "center",
@@ -2835,38 +3007,18 @@ function Visualizer() {
     }
   }, /*#__PURE__*/React.createElement("span", {
     style: mixerLabelStyle
-  }, "Pattern"), /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: "flex",
-      gap: 6,
-      flexWrap: "wrap"
-    }
-  }, /*#__PURE__*/React.createElement("button", {
-    onClick: randomizePattern,
-    style: mixerTinyBtnStyle(patternLock === null)
-  }, "Randomize"), PATTERN_OPTIONS.map(po => /*#__PURE__*/React.createElement("button", {
-    key: po.key,
-    onClick: () => livePattern(po.key),
-    style: mixerTinyBtnStyle(patternLock === po.key)
-  }, po.label)))), /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: "flex",
-      flexDirection: "column",
-      gap: 8
-    }
-  }, /*#__PURE__*/React.createElement("span", {
-    style: mixerLabelStyle
-  }, "Density"), /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: "flex",
-      gap: 6,
-      flexWrap: "wrap"
-    }
-  }, DENSITY_OPTIONS.map(d => /*#__PURE__*/React.createElement("button", {
-    key: d.key,
-    onClick: () => liveDensity(d.key),
-    style: mixerTinyBtnStyle(d.key === densityKey)
-  }, d.label)))), /*#__PURE__*/React.createElement("div", {
+  }, "Pattern"), /*#__PURE__*/React.createElement(Dropdown, {
+    value: patternLock || "",
+    onChange: v => v ? livePattern(v) : randomizePattern(),
+    options: [{
+      value: "",
+      label: "Random"
+    }, ...PATTERN_OPTIONS.map(po => ({
+      value: po.key,
+      label: po.label
+    }))],
+    compact: true
+  })), /*#__PURE__*/React.createElement("div", {
     style: {
       display: "flex",
       flexDirection: "column",
@@ -2874,17 +3026,15 @@ function Visualizer() {
     }
   }, /*#__PURE__*/React.createElement("span", {
     style: mixerLabelStyle
-  }, "Base Speed"), /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: "flex",
-      gap: 6,
-      flexWrap: "wrap"
-    }
-  }, SPEED_OPTIONS.map(s => /*#__PURE__*/React.createElement("button", {
-    key: s.key,
-    onClick: () => liveSpeedKey(s.key),
-    style: mixerTinyBtnStyle(s.key === speedKey)
-  }, s.label)))), /*#__PURE__*/React.createElement("div", {
+  }, "Density"), /*#__PURE__*/React.createElement(Dropdown, {
+    value: densityKey,
+    onChange: v => liveDensity(v),
+    options: DENSITY_OPTIONS.map(d => ({
+      value: d.key,
+      label: d.label
+    })),
+    compact: true
+  })), /*#__PURE__*/React.createElement("div", {
     style: {
       display: "flex",
       flexDirection: "column",
@@ -2892,21 +3042,49 @@ function Visualizer() {
     }
   }, /*#__PURE__*/React.createElement("span", {
     style: mixerLabelStyle
-  }, "Audio Source"), /*#__PURE__*/React.createElement("div", {
+  }, "Base Speed"), /*#__PURE__*/React.createElement(Dropdown, {
+    value: speedKey,
+    onChange: v => liveSpeedKey(v),
+    options: SPEED_OPTIONS.map(s => ({
+      value: s.key,
+      label: s.label
+    })),
+    compact: true
+  })), /*#__PURE__*/React.createElement("div", {
     style: {
       display: "flex",
-      gap: 6,
-      flexWrap: "wrap"
+      flexDirection: "column",
+      gap: 8
     }
-  }, /*#__PURE__*/React.createElement("button", {
-    onClick: () => liveAudioMode("none"),
-    style: mixerTinyBtnStyle(audioMode === "none")
-  }, "None"), /*#__PURE__*/React.createElement("label", {
+  }, /*#__PURE__*/React.createElement("span", {
+    style: mixerLabelStyle
+  }, "Audio Source"), /*#__PURE__*/React.createElement(Dropdown, {
+    value: audioMode,
+    onChange: v => liveAudioMode(v),
+    options: [{
+      value: "none",
+      label: "None"
+    }, {
+      value: "file",
+      label: "Upload Song"
+    }, {
+      value: "mic",
+      label: "Mic"
+    }, {
+      value: "tap",
+      label: "Tap Tempo"
+    }, {
+      value: "cam",
+      label: "Camera"
+    }],
+    compact: true
+  }), audioMode === "file" && /*#__PURE__*/React.createElement("label", {
     style: {
-      ...mixerTinyBtnStyle(audioMode === "file"),
-      cursor: "pointer"
+      ...mixerTinyBtnStyle(true),
+      cursor: "pointer",
+      display: "inline-flex"
     }
-  }, "Upload", /*#__PURE__*/React.createElement("input", {
+  }, "Choose File", /*#__PURE__*/React.createElement("input", {
     type: "file",
     accept: "audio/*",
     style: {
@@ -2916,32 +3094,84 @@ function Visualizer() {
       const f = e.target.files && e.target.files[0];
       if (f) liveAudioFile(f);
     }
-  })), /*#__PURE__*/React.createElement("button", {
-    onClick: () => liveAudioMode("mic"),
-    style: mixerTinyBtnStyle(audioMode === "mic")
-  }, "Mic"), /*#__PURE__*/React.createElement("button", {
-    onClick: () => liveAudioMode("tap"),
-    style: mixerTinyBtnStyle(audioMode === "tap")
-  }, "Tap Tempo"), /*#__PURE__*/React.createElement("button", {
-    onClick: () => liveAudioMode("cam"),
-    style: mixerTinyBtnStyle(audioMode === "cam")
-  }, "Camera")), audioMode === "tap" && /*#__PURE__*/React.createElement("div", {
+  })), audioMode === "tap" && /*#__PURE__*/React.createElement("div", {
     style: {
       display: "flex",
       gap: 10,
-      alignItems: "center"
+      alignItems: "center",
+      flexWrap: "wrap"
     }
   }, /*#__PURE__*/React.createElement("button", {
     onClick: handleTap,
     style: mixerTinyBtnStyle(false)
-  }, "TAP"), /*#__PURE__*/React.createElement("span", {
+  }, "TAP"), /*#__PURE__*/React.createElement("input", {
+    type: "number",
+    min: 40,
+    max: 300,
+    value: bpm || "",
+    placeholder: "BPM",
+    onChange: e => {
+      const v = parseInt(e.target.value, 10);
+      if (!isNaN(v) && v > 0) {
+        setBpm(v);
+        if (gRef.current) gRef.current.manualBpm = v;
+      } else if (e.target.value === "") {
+        setBpm(null);
+      }
+    },
+    style: {
+      width: 64,
+      background: "rgba(255,255,255,0.06)",
+      border: "1px solid rgba(255,255,255,0.16)",
+      borderRadius: 3,
+      color: "#fff",
+      padding: "6px 8px",
+      fontSize: 12
+    }
+  }), /*#__PURE__*/React.createElement("span", {
     style: mixerValueStyle
   }, bpm ? bpm + " BPM" : "--")), audioStatus && /*#__PURE__*/React.createElement("div", {
     style: {
       fontSize: 11,
       opacity: 0.5
     }
-  }, audioStatus))), recordStatus && /*#__PURE__*/React.createElement("div", {
+  }, audioStatus)), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      flexDirection: "column",
+      gap: 8
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: mixerLabelStyle
+  }, "MIDI"), midiStatus && /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 11,
+      opacity: 0.5
+    }
+  }, midiStatus), MIDI_TARGETS.map(t => /*#__PURE__*/React.createElement("div", {
+    key: t.key,
+    style: {
+      display: "flex",
+      alignItems: "center",
+      gap: 8
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      ...mixerLabelStyle,
+      width: 110
+    }
+  }, t.label), /*#__PURE__*/React.createElement("button", {
+    onClick: () => startMidiLearn(t.key),
+    style: mixerTinyBtnStyle(midiLearning === t.key)
+  }, midiLearning === t.key ? "Listening\u2026" : midiMappings[t.key] ? midiMappings[t.key].type === "cc" ? "CC " + midiMappings[t.key].number : "Note " + midiMappings[t.key].number : "Learn"), midiMappings[t.key] && /*#__PURE__*/React.createElement("button", {
+    onClick: () => clearMidiMapping(t.key),
+    "aria-label": "Clear mapping",
+    style: {
+      ...mixerTinyBtnStyle(false),
+      padding: "6px 8px",
+      color: "rgba(255,255,255,0.4)"
+    }
+  }, "\u2715"))))), recordStatus && /*#__PURE__*/React.createElement("div", {
     style: recordStatusStyle
   }, recordStatus), !showControls && /*#__PURE__*/React.createElement("button", {
     onClick: e => {
@@ -2971,38 +3201,41 @@ function Visualizer() {
       lineHeight: 1.5,
       letterSpacing: 0.2
     }
-  }, "Pick your options and generate — every result is randomized, even with identical settings."), /*#__PURE__*/React.createElement(SectionLabel, null, "Color Palette"), /*#__PURE__*/React.createElement(OptionRow, null, PALETTES.map((p, i) => /*#__PURE__*/React.createElement("button", {
-    key: p.name,
-    onClick: () => setPaletteIdx(i),
-    style: chipSwatchStyle(i === paletteIdx)
-  }, /*#__PURE__*/React.createElement("div", {
+  }, "Pick your options and generate — every result is randomized, even with identical settings."), /*#__PURE__*/React.createElement(Dropdown, {
+    label: "Color Palette",
+    value: String(paletteIdx),
+    onChange: v => setPaletteIdx(Number(v)),
+    options: PALETTES.map((p, i) => ({
+      value: String(i),
+      label: p.name
+    }))
+  }), /*#__PURE__*/React.createElement("div", {
     style: {
       display: "flex",
-      background: p.bg || "transparent",
-      padding: 2,
-      borderRadius: 4
+      width: "100%",
+      maxWidth: 460,
+      height: 22,
+      marginTop: 8,
+      marginBottom: 20,
+      borderRadius: 3,
+      overflow: "hidden",
+      background: PALETTES[paletteIdx].bg || "transparent"
     }
-  }, p.colors.slice(0, 5).map((c, j) => /*#__PURE__*/React.createElement("div", {
+  }, PALETTES[paletteIdx].colors.slice(0, 6).map((c, j) => /*#__PURE__*/React.createElement("div", {
     key: j,
     style: {
-      width: 12,
-      height: 18,
+      flex: 1,
       background: c
     }
-  }))), /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontSize: 11,
-      marginTop: 5
-    }
-  }, p.name)))), /*#__PURE__*/React.createElement(SectionLabel, null, "Content"), /*#__PURE__*/React.createElement(OptionRow, null, CONTENT_TYPES.map(c => /*#__PURE__*/React.createElement("button", {
-    key: c.key,
-    onClick: () => setContentType(c.key),
-    style: chipStyle(c.key === contentType, 74)
-  }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontSize: 12
-    }
-  }, c.label)))), contentType === "custom" && /*#__PURE__*/React.createElement("input", {
+  }))), /*#__PURE__*/React.createElement(Dropdown, {
+    label: "Content",
+    value: contentType,
+    onChange: v => setContentType(v),
+    options: CONTENT_TYPES.map(c => ({
+      value: c.key,
+      label: c.label
+    }))
+  }), contentType === "custom" && /*#__PURE__*/React.createElement("input", {
     type: "text",
     value: customText,
     maxLength: 40,
@@ -3075,57 +3308,100 @@ function Visualizer() {
   }, "Undo"), /*#__PURE__*/React.createElement("button", {
     onClick: clearDrawing,
     style: tapBtnStyle
-  }, "Clear"))), /*#__PURE__*/React.createElement(SectionLabel, null, "Density"), /*#__PURE__*/React.createElement(OptionRow, null, DENSITY_OPTIONS.map(d => /*#__PURE__*/React.createElement("button", {
-    key: d.key,
-    onClick: () => setDensityKey(d.key),
-    style: chipPillStyle(d.key === densityKey)
-  }, d.label))), /*#__PURE__*/React.createElement(SectionLabel, null, "Speed"), /*#__PURE__*/React.createElement(OptionRow, null, SPEED_OPTIONS.map(s => /*#__PURE__*/React.createElement("button", {
-    key: s.key,
-    onClick: () => setSpeedKey(s.key),
-    style: chipPillStyle(s.key === speedKey)
-  }, s.label))), /*#__PURE__*/React.createElement(SectionLabel, null, "Audio Reactive (optional)"), /*#__PURE__*/React.createElement(OptionRow, null, /*#__PURE__*/React.createElement("button", {
-    onClick: () => chooseAudioMode("none"),
-    style: chipPillStyle(audioMode === "none")
-  }, "No Audio"), /*#__PURE__*/React.createElement("label", {
+  }, "Clear"))), /*#__PURE__*/React.createElement(Dropdown, {
+    label: "Density",
+    value: densityKey,
+    onChange: v => setDensityKey(v),
+    options: DENSITY_OPTIONS.map(d => ({
+      value: d.key,
+      label: d.label
+    }))
+  }), /*#__PURE__*/React.createElement(Dropdown, {
+    label: "Speed",
+    value: speedKey,
+    onChange: v => setSpeedKey(v),
+    options: SPEED_OPTIONS.map(s => ({
+      value: s.key,
+      label: s.label
+    }))
+  }), /*#__PURE__*/React.createElement(Dropdown, {
+    label: "Audio Reactive (optional)",
+    value: audioMode,
+    onChange: v => chooseAudioMode(v),
+    options: [{
+      value: "none",
+      label: "No Audio"
+    }, {
+      value: "file",
+      label: "Upload Song"
+    }, {
+      value: "mic",
+      label: "Microphone"
+    }, {
+      value: "tap",
+      label: "Tap Tempo"
+    }, {
+      value: "cam",
+      label: "Camera"
+    }]
+  }), audioMode === "file" && /*#__PURE__*/React.createElement("div", {
     style: {
-      ...chipPillStyle(audioMode === "file"),
-      cursor: "pointer"
+      width: "100%",
+      maxWidth: 460,
+      marginBottom: 20
     }
-  }, "Upload Song", /*#__PURE__*/React.createElement("input", {
+  }, /*#__PURE__*/React.createElement("label", {
+    style: {
+      ...chipPillStyle(true),
+      cursor: "pointer",
+      display: "inline-flex"
+    }
+  }, "Choose File", /*#__PURE__*/React.createElement("input", {
     type: "file",
     accept: "audio/*",
     style: {
       display: "none"
     },
-    onChange: e => {
-      chooseAudioMode("file");
-      onFileChosen(e);
-    }
-  })), /*#__PURE__*/React.createElement("button", {
-    onClick: () => chooseAudioMode("mic"),
-    style: chipPillStyle(audioMode === "mic")
-  }, "Microphone"), /*#__PURE__*/React.createElement("button", {
-    onClick: () => chooseAudioMode("tap"),
-    style: chipPillStyle(audioMode === "tap")
-  }, "Tap Tempo"), /*#__PURE__*/React.createElement("button", {
-    onClick: () => chooseAudioMode("cam"),
-    style: chipPillStyle(audioMode === "cam")
-  }, "Camera")), audioMode === "tap" && /*#__PURE__*/React.createElement("div", {
+    onChange: onFileChosen
+  }))), audioMode === "tap" && /*#__PURE__*/React.createElement("div", {
     style: {
       display: "flex",
       alignItems: "center",
-      gap: 12,
-      marginBottom: 10
+      gap: 10,
+      marginBottom: 20,
+      flexWrap: "wrap"
     }
   }, /*#__PURE__*/React.createElement("button", {
     onClick: handleTap,
     style: tapBtnStyle
-  }, "TAP"), /*#__PURE__*/React.createElement("div", {
+  }, "TAP"), /*#__PURE__*/React.createElement("input", {
+    type: "number",
+    min: 40,
+    max: 300,
+    value: bpm || "",
+    placeholder: "BPM",
+    onChange: e => {
+      const v = parseInt(e.target.value, 10);
+      if (!isNaN(v) && v > 0) {
+        setBpm(v);
+        if (gRef.current) gRef.current.manualBpm = v;
+      } else if (e.target.value === "") {
+        setBpm(null);
+      }
+    },
     style: {
-      fontSize: 13,
-      opacity: 0.7
+      ...customTextInputStyle,
+      width: 84,
+      marginBottom: 0,
+      padding: "9px 10px",
+      fontSize: 13
     }
-  }, bpm ? bpm + " BPM" : "Tap a few times to set the beat")), audioStatus && /*#__PURE__*/React.createElement("div", {
+  }), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 12,
+      opacity: 0.6
+    }
+  }, bpm ? bpm + " BPM" : "Tap or type a tempo")), audioStatus && /*#__PURE__*/React.createElement("div", {
     style: {
       fontSize: 12,
       opacity: 0.6,
@@ -3191,7 +3467,59 @@ function OptionRow({
     }
   }, children);
 }
+function Dropdown({
+  label,
+  value,
+  onChange,
+  options,
+  compact
+}) {
+  return /*#__PURE__*/React.createElement("div", {
+    style: {
+      width: compact ? "auto" : "100%",
+      flex: compact ? 1 : "none",
+      maxWidth: compact ? "none" : 460,
+      marginBottom: compact ? 0 : 20
+    }
+  }, label && /*#__PURE__*/React.createElement(SectionLabel, null, label), /*#__PURE__*/React.createElement("select", {
+    value,
+    onChange: e => onChange(e.target.value),
+    style: compact ? dropdownSelectCompactStyle : dropdownSelectStyle
+  }, options.map(o => /*#__PURE__*/React.createElement("option", {
+    key: o.value,
+    value: o.value
+  }, o.label))));
+}
 const ACCENT = "#C6FF3D";
+const dropdownChevronSvg = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Cpath d='M5.5 7.5L10 12.5L14.5 7.5' stroke='%23C6FF3D' stroke-width='1.6' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E";
+const dropdownSelectStyle = {
+  width: "100%",
+  maxWidth: 460,
+  appearance: "none",
+  WebkitAppearance: "none",
+  MozAppearance: "none",
+  background: "rgba(255,255,255,0.04)",
+  border: "1px solid rgba(255,255,255,0.16)",
+  borderRadius: 3,
+  color: "#fff",
+  fontSize: 13,
+  fontWeight: 600,
+  padding: "12px 36px 12px 14px",
+  cursor: "pointer",
+  backgroundImage: "url(\"" + dropdownChevronSvg + "\")",
+  backgroundRepeat: "no-repeat",
+  backgroundPosition: "right 12px center",
+  backgroundSize: "14px",
+  outline: "none"
+};
+const dropdownSelectCompactStyle = {
+  ...dropdownSelectStyle,
+  maxWidth: "none",
+  fontSize: 12,
+  fontWeight: 700,
+  padding: "8px 30px 8px 10px",
+  borderRadius: 3
+};
 const setupOverlayStyle = {
   position: "absolute",
   inset: 0,
