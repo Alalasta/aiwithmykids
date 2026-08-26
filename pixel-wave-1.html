@@ -487,40 +487,6 @@ const CONTENT_TYPES = [{
   label: "Liquid Light",
   emoji: "🌊"
 }];
-const DENSITY_OPTIONS = [{
-  key: "sparse",
-  label: "Sparse",
-  mult: 0.5
-}, {
-  key: "normal",
-  label: "Normal",
-  mult: 1
-}, {
-  key: "busy",
-  label: "Busy",
-  mult: 1.7
-}, {
-  key: "chaotic",
-  label: "Chaotic",
-  mult: 2.6
-}];
-const SPEED_OPTIONS = [{
-  key: "chill",
-  label: "Chill",
-  mult: 0.5
-}, {
-  key: "normal",
-  label: "Normal",
-  mult: 1
-}, {
-  key: "fast",
-  label: "Fast",
-  mult: 1.9
-}, {
-  key: "rave",
-  label: "Rave",
-  mult: 3.2
-}];
 const PATTERNS = ["rain", "orbit", "float", "burst", "wave", "spiral", "matrix", "ribbon", "hurricane", "soundwave"];
 const PATTERN_OPTIONS = [{
   key: "rain",
@@ -1176,29 +1142,48 @@ function updateVisual(g, dt, nowMs) {
     });
   }
 }
-// Scratch canvas reused every frame for tinting Draw content. Isolating the
-// composite operation here (rather than doing it directly on the main
-// canvas) keeps it from picking up the background or other particles that
-// happen to already be drawn underneath it.
-let drawTintScratch = null;
-function drawTintedDrawing(ctx, img, iw, ih, color) {
-  const size = Math.max(64, Math.ceil(Math.max(iw, ih)) + 8);
-  if (!drawTintScratch) drawTintScratch = document.createElement("canvas");
-  if (drawTintScratch.width < size || drawTintScratch.height < size) {
-    drawTintScratch.width = size;
-    drawTintScratch.height = size;
+// Cache of tinted versions of the current drawing, one per palette color
+// actually in use, rebuilt only when the drawing itself changes (a new
+// stroke, undo, clear, or upload) rather than every particle on every
+// frame. This is the main fix for Draw content feeling heavier than Image
+// content: previously every single particle re-tinted itself from scratch
+// 60 times a second even when nothing had changed since the last frame.
+let drawTintCache = {
+  img: null,
+  version: -1,
+  aspect: 1,
+  byColor: {}
+};
+const DRAW_TINT_REF_WIDTH = 160;
+function getTintedDrawImage(img, aspect, color) {
+  const v = img._drawVersion || 0;
+  if (drawTintCache.img !== img || drawTintCache.version !== v) {
+    drawTintCache.img = img;
+    drawTintCache.version = v;
+    drawTintCache.aspect = aspect;
+    drawTintCache.byColor = {};
   }
-  const tctx = drawTintScratch.getContext("2d");
-  tctx.clearRect(0, 0, size, size);
-  const ox = (size - iw) / 2,
-    oy = (size - ih) / 2;
-  tctx.globalCompositeOperation = "source-over";
-  tctx.drawImage(img, ox, oy, iw, ih);
-  tctx.globalCompositeOperation = "source-atop";
-  tctx.fillStyle = color;
-  tctx.fillRect(0, 0, size, size);
-  tctx.globalCompositeOperation = "source-over";
-  ctx.drawImage(drawTintScratch, 0, 0, size, size, -size / 2, -size / 2, size, size);
+  let cached = drawTintCache.byColor[color];
+  if (!cached) {
+    const w = DRAW_TINT_REF_WIDTH,
+      h = Math.max(1, Math.round(DRAW_TINT_REF_WIDTH * aspect));
+    const c = document.createElement("canvas");
+    c.width = w;
+    c.height = h;
+    const cctx = c.getContext("2d");
+    cctx.drawImage(img, 0, 0, w, h);
+    cctx.globalCompositeOperation = "source-atop";
+    cctx.fillStyle = color;
+    cctx.fillRect(0, 0, w, h);
+    cctx.globalCompositeOperation = "source-over";
+    cached = c;
+    drawTintCache.byColor[color] = cached;
+  }
+  return cached;
+}
+function drawTintedDrawing(ctx, img, iw, ih, color) {
+  const tinted = getTintedDrawImage(img, ih / iw, color);
+  ctx.drawImage(tinted, -iw / 2, -ih / 2, iw, ih);
 }
 function drawVisual(ctx, g) {
   const w = g.width,
@@ -1403,9 +1388,8 @@ function StageOutput() {
     const w = window.innerWidth,
       h = window.innerHeight;
     const palette = PALETTES[payload.paletteIdx] || PALETTES[0];
-    const densityOpt = DENSITY_OPTIONS.find(d => d.key === payload.densityKey) || DENSITY_OPTIONS[1];
-    const speedOpt = SPEED_OPTIONS.find(s => s.key === payload.speedKey) || SPEED_OPTIONS[1];
-    const cfg = makeConfig(payload.contentType, palette, w, h, densityOpt.mult, speedOpt.mult, payload.customText, imgEl || null, payload.imageAspect || 1, payload.pattern);
+    const densityVal = payload.densityVal || 1;
+    const cfg = makeConfig(payload.contentType, palette, w, h, densityVal, 1, payload.customText, imgEl || null, payload.imageAspect || 1, payload.pattern);
     cfg.width = w;
     cfg.height = h;
     cfg.lastTime = performance.now();
@@ -1600,6 +1584,8 @@ function Visualizer() {
   const drawCanvasRef = useRef(null);
   const drawSnapshotRef = useRef(null);
   const drawUndoStackRef = useRef([]);
+  const drawBroadcastTimerRef = useRef(null);
+  const densityDebounceRef = useRef(null);
   const bcRef = useRef(null);
   const stageWindowRef = useRef(null);
   const isDrawingRef = useRef(false);
@@ -1614,8 +1600,7 @@ function Visualizer() {
   const [contentType, setContentType] = useState("numbers");
   const [patternLock, setPatternLock] = useState(null);
   const [customText, setCustomText] = useState("PIXELWAVE");
-  const [densityKey, setDensityKey] = useState("normal");
-  const [speedKey, setSpeedKey] = useState("normal");
+  const [densityVal, setDensityVal] = useState(1);
   const [audioMode, setAudioMode] = useState("none");
   const [audioFile, setAudioFile] = useState(null);
   const [audioStatus, setAudioStatus] = useState("");
@@ -1641,6 +1626,7 @@ function Visualizer() {
   const [midiStatus, setMidiStatus] = useState("");
   const [midiMappings, setMidiMappings] = useState({});
   const [midiLearning, setMidiLearning] = useState(null);
+  const [midiSelectedTarget, setMidiSelectedTarget] = useState(MIDI_TARGETS[0].key);
   const midiMappingsRef = useRef({});
   const midiLearningRef = useRef(null);
   const [previewOff, setPreviewOff] = useState(false);
@@ -1758,7 +1744,7 @@ function Visualizer() {
         names.push(input.name || "MIDI device");
       });
       if (!cancelled) {
-        setMidiStatus(names.length ? "Connected: " + names.join(", ") : "No MIDI devices found -- plug one in");
+        setMidiStatus(names.length ? "Connected to MIDI controller: " + names.join(", ") : "No MIDI accessory connected");
       }
     }
     navigator.requestMIDIAccess().then(a => {
@@ -1767,7 +1753,7 @@ function Visualizer() {
       wireInputs(a);
       a.onstatechange = () => wireInputs(a);
     }).catch(() => {
-      if (!cancelled) setMidiStatus("MIDI access denied");
+      if (!cancelled) setMidiStatus("No MIDI accessory connected");
     });
     return () => {
       cancelled = true;
@@ -1806,8 +1792,7 @@ function Visualizer() {
       contentType: g.contentType,
       pattern: g.pattern,
       paletteIdx,
-      densityKey,
-      speedKey,
+      densityVal,
       customText,
       mixSpeed: g.mixSpeed,
       mixBeat: g.mixBeatBoost,
@@ -1870,7 +1855,17 @@ function Visualizer() {
       // than g.contentType covers the deferred case too: if they picked
       // Image before uploading anything, this is what finally performs
       // the switch now that there's a real picture to show.
-      if (contentType === "logo" && gRef.current) {
+      const g = gRef.current;
+      if (g && g.contentType === "logo") {
+        g.logoImage = img;
+        g.logoAspect = logoAspectRef.current;
+        bcSend("contentSwap", {
+          ct: "logo",
+          customText,
+          imageDataUrl: elementToDataURL(img),
+          imageAspect: logoAspectRef.current
+        });
+      } else if (contentType === "logo" && g) {
         applyLiveContentSwap("logo", img, logoAspectRef.current);
       }
     };
@@ -1928,13 +1923,48 @@ function Visualizer() {
     snap.width = canvas.width;
     snap.height = canvas.height;
     snap.getContext("2d").drawImage(canvas, 0, 0);
-    // Same deferred-switch logic as onLogoChosen: check the person's
-    // actual selection, not just whether it was already active, so the
-    // first stroke performs the switch if Draw was picked before anything
-    // was drawn.
-    if (contentType === "draw" && gRef.current) {
-      applyLiveContentSwap("draw", snap, snap.height / snap.width || 1);
+    // Bumped so the tint cache in drawTintedDrawing knows this stroke
+    // actually changed the pixels (the canvas object itself is reused, so
+    // reference equality alone can't detect that).
+    snap._drawVersion = (snap._drawVersion || 0) + 1;
+    const g = gRef.current;
+    if (!g) return;
+    const aspect = snap.height / snap.width || 1;
+    if (g.contentType === "draw") {
+      // Already active: just swap the image reference. No need to re-roll
+      // every particle's content again for a mid-sketch update -- they
+      // all already read g.logoImage fresh each frame, so this alone is
+      // enough to show the update, and it's the difference between one
+      // cheap assignment and rebuilding the entire particle set on every
+      // single stroke.
+      g.logoImage = snap;
+      g.logoAspect = aspect;
+      scheduleDrawBroadcast();
+    } else if (contentType === "draw") {
+      // First stroke after selecting Draw -- this is the real switch, and
+      // does need the full particle re-roll (they're currently some other
+      // content type's particles).
+      applyLiveContentSwap("draw", snap, aspect);
     }
+  }
+  function scheduleDrawBroadcast() {
+    // The Stage sync payload requires PNG-encoding the canvas
+    // (canvas.toDataURL), which is expensive enough to visibly stutter
+    // drawing if it ran on every single stroke. Debouncing it so it only
+    // actually fires once the person pauses keeps live sync working
+    // without paying that cost mid-sketch.
+    if (drawBroadcastTimerRef.current) clearTimeout(drawBroadcastTimerRef.current);
+    drawBroadcastTimerRef.current = setTimeout(() => {
+      drawBroadcastTimerRef.current = null;
+      const g = gRef.current;
+      if (!g || g.contentType !== "draw" || !g.logoImage) return;
+      bcSend("contentSwap", {
+        ct: "draw",
+        customText,
+        imageDataUrl: elementToDataURL(g.logoImage),
+        imageAspect: g.logoAspect
+      });
+    }, 450);
   }
   function handleDrawEnd() {
     isDrawingRef.current = false;
@@ -2060,17 +2090,19 @@ function Visualizer() {
       pattern: null
     });
   }
-  function liveDensity(key) {
-    setDensityKey(key);
-    generate({
-      densityKey: key
-    });
-  }
-  function liveSpeedKey(key) {
-    setSpeedKey(key);
-    generate({
-      speedKey: key
-    });
+  function liveDensity(v) {
+    setDensityVal(v);
+    // Density changes rebuild the whole particle set, which is too heavy
+    // to do on every tick while someone's actively dragging the fader --
+    // debounce it the same way Draw content's live sync is debounced, so
+    // it only actually regenerates once they let go.
+    if (densityDebounceRef.current) clearTimeout(densityDebounceRef.current);
+    densityDebounceRef.current = setTimeout(() => {
+      densityDebounceRef.current = null;
+      generate({
+        densityVal: v
+      });
+    }, 250);
   }
   async function liveAudioMode(mode) {
     setAudioMode(mode);
@@ -2187,8 +2219,7 @@ function Visualizer() {
       paletteIdx,
       contentType,
       customText,
-      densityKey,
-      speedKey,
+      densityVal,
       patternLock,
       mixSpeed: mixSpeedVal,
       mixBeat: mixBeatVal,
@@ -2208,8 +2239,7 @@ function Visualizer() {
     setPaletteIdx(preset.paletteIdx);
     setContentType(preset.contentType);
     setCustomText(preset.customText || "");
-    setDensityKey(preset.densityKey);
-    setSpeedKey(preset.speedKey);
+    setDensityVal(preset.densityVal != null ? preset.densityVal : 1);
     setPatternLock(preset.patternLock);
     setMixSpeedVal(preset.mixSpeed);
     setMixBeatVal(preset.mixBeat);
@@ -2221,8 +2251,7 @@ function Visualizer() {
       contentType: preset.contentType,
       pattern: preset.patternLock,
       paletteIdx: preset.paletteIdx,
-      densityKey: preset.densityKey,
-      speedKey: preset.speedKey,
+      densityVal: preset.densityVal != null ? preset.densityVal : 1,
       customText: preset.customText || "",
       mixSpeed: preset.mixSpeed,
       mixBeat: preset.mixBeat,
@@ -2491,15 +2520,13 @@ function Visualizer() {
     const activeContentType = overrides.contentType !== undefined ? overrides.contentType : contentType;
     const activePattern = overrides.pattern !== undefined ? overrides.pattern : patternLock;
     const activePaletteIdx = overrides.paletteIdx !== undefined ? overrides.paletteIdx : paletteIdx;
-    const activeDensityKey = overrides.densityKey !== undefined ? overrides.densityKey : densityKey;
-    const activeSpeedKey = overrides.speedKey !== undefined ? overrides.speedKey : speedKey;
+    const activeDensityVal = overrides.densityVal !== undefined ? overrides.densityVal : densityVal;
     const activeCustomText = overrides.customText !== undefined ? overrides.customText : customText;
     const activeTrailOverrideVal = overrides.trailOverrideVal !== undefined ? overrides.trailOverrideVal : trailOverrideVal;
+    const activeMixSpeed = overrides.mixSpeed !== undefined ? overrides.mixSpeed : mixSpeedVal;
     const w = window.innerWidth,
       h = window.innerHeight;
     const palette = PALETTES[activePaletteIdx];
-    const densityMult = DENSITY_OPTIONS.find(d => d.key === activeDensityKey).mult;
-    const speedMult = SPEED_OPTIONS.find(s => s.key === activeSpeedKey).mult;
     const drawCanvas = drawCanvasRef.current;
     if (activeContentType === "draw" && drawCanvas) syncDrawSnapshot();
     let imageSource = activeContentType === "draw" ? drawSnapshotRef.current : logoImageRef.current;
@@ -2508,12 +2535,12 @@ function Visualizer() {
       imageSource = overrides.logoImageEl;
       imageAspect = overrides.logoAspect || 1;
     }
-    const cfg = makeConfig(activeContentType, palette, w, h, densityMult, speedMult, activeCustomText, imageSource, imageAspect, activePattern);
+    const cfg = makeConfig(activeContentType, palette, w, h, activeDensityVal, 1, activeCustomText, imageSource, imageAspect, activePattern);
     cfg.width = w;
     cfg.height = h;
     cfg.lastTime = performance.now();
     if (audioMode === "tap" && bpm) cfg.manualBpm = bpm;
-    cfg.mixSpeed = overrides.mixSpeed !== undefined ? overrides.mixSpeed : mixSpeedVal;
+    cfg.mixSpeed = activeMixSpeed;
     cfg.mixBeatBoost = overrides.mixBeat !== undefined ? overrides.mixBeat : mixBeatVal;
     cfg.mixGlow = overrides.mixGlow !== undefined ? overrides.mixGlow : mixGlowVal;
     cfg.trailOverride = activeTrailOverrideVal === "auto" ? null : activeTrailOverrideVal === "on";
@@ -2527,8 +2554,7 @@ function Visualizer() {
       contentType: activeContentType,
       pattern: cfg.pattern,
       paletteIdx: activePaletteIdx,
-      densityKey: activeDensityKey,
-      speedKey: activeSpeedKey,
+      densityVal: activeDensityVal,
       customText: activeCustomText,
       mixSpeed: cfg.mixSpeed,
       mixBeat: cfg.mixBeatBoost,
@@ -3018,39 +3044,13 @@ function Visualizer() {
       label: po.label
     }))],
     compact: true
-  })), /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: "flex",
-      flexDirection: "column",
-      gap: 8
-    }
-  }, /*#__PURE__*/React.createElement("span", {
-    style: mixerLabelStyle
-  }, "Density"), /*#__PURE__*/React.createElement(Dropdown, {
-    value: densityKey,
-    onChange: v => liveDensity(v),
-    options: DENSITY_OPTIONS.map(d => ({
-      value: d.key,
-      label: d.label
-    })),
-    compact: true
-  })), /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: "flex",
-      flexDirection: "column",
-      gap: 8
-    }
-  }, /*#__PURE__*/React.createElement("span", {
-    style: mixerLabelStyle
-  }, "Base Speed"), /*#__PURE__*/React.createElement(Dropdown, {
-    value: speedKey,
-    onChange: v => liveSpeedKey(v),
-    options: SPEED_OPTIONS.map(s => ({
-      value: s.key,
-      label: s.label
-    })),
-    compact: true
-  })), /*#__PURE__*/React.createElement("div", {
+  })), /*#__PURE__*/React.createElement(MixerSlider, {
+    label: "Density",
+    min: 0.3,
+    max: 3,
+    value: densityVal,
+    onChange: liveDensity
+  }), /*#__PURE__*/React.createElement("div", {
     style: {
       display: "flex",
       flexDirection: "column",
@@ -3148,30 +3148,32 @@ function Visualizer() {
       fontSize: 11,
       opacity: 0.5
     }
-  }, midiStatus), MIDI_TARGETS.map(t => /*#__PURE__*/React.createElement("div", {
-    key: t.key,
+  }, midiStatus), /*#__PURE__*/React.createElement("div", {
     style: {
       display: "flex",
       alignItems: "center",
       gap: 8
     }
-  }, /*#__PURE__*/React.createElement("span", {
-    style: {
-      ...mixerLabelStyle,
-      width: 110
-    }
-  }, t.label), /*#__PURE__*/React.createElement("button", {
-    onClick: () => startMidiLearn(t.key),
-    style: mixerTinyBtnStyle(midiLearning === t.key)
-  }, midiLearning === t.key ? "Listening\u2026" : midiMappings[t.key] ? midiMappings[t.key].type === "cc" ? "CC " + midiMappings[t.key].number : "Note " + midiMappings[t.key].number : "Learn"), midiMappings[t.key] && /*#__PURE__*/React.createElement("button", {
-    onClick: () => clearMidiMapping(t.key),
+  }, /*#__PURE__*/React.createElement(Dropdown, {
+    value: midiSelectedTarget,
+    onChange: v => setMidiSelectedTarget(v),
+    options: MIDI_TARGETS.map(t => ({
+      value: t.key,
+      label: t.label
+    })),
+    compact: true
+  }), /*#__PURE__*/React.createElement("button", {
+    onClick: () => startMidiLearn(midiSelectedTarget),
+    style: mixerTinyBtnStyle(midiLearning === midiSelectedTarget)
+  }, midiLearning === midiSelectedTarget ? "Listening\u2026" : midiMappings[midiSelectedTarget] ? midiMappings[midiSelectedTarget].type === "cc" ? "CC " + midiMappings[midiSelectedTarget].number : "Note " + midiMappings[midiSelectedTarget].number : "Learn"), midiMappings[midiSelectedTarget] && /*#__PURE__*/React.createElement("button", {
+    onClick: () => clearMidiMapping(midiSelectedTarget),
     "aria-label": "Clear mapping",
     style: {
       ...mixerTinyBtnStyle(false),
       padding: "6px 8px",
       color: "rgba(255,255,255,0.4)"
     }
-  }, "\u2715"))))), recordStatus && /*#__PURE__*/React.createElement("div", {
+  }, "\u2715")))), recordStatus && /*#__PURE__*/React.createElement("div", {
     style: recordStatusStyle
   }, recordStatus), !showControls && /*#__PURE__*/React.createElement("button", {
     onClick: e => {
@@ -3308,23 +3310,65 @@ function Visualizer() {
   }, "Undo"), /*#__PURE__*/React.createElement("button", {
     onClick: clearDrawing,
     style: tapBtnStyle
-  }, "Clear"))), /*#__PURE__*/React.createElement(Dropdown, {
-    label: "Density",
-    value: densityKey,
-    onChange: v => setDensityKey(v),
-    options: DENSITY_OPTIONS.map(d => ({
-      value: d.key,
-      label: d.label
-    }))
-  }), /*#__PURE__*/React.createElement(Dropdown, {
-    label: "Speed",
-    value: speedKey,
-    onChange: v => setSpeedKey(v),
-    options: SPEED_OPTIONS.map(s => ({
-      value: s.key,
-      label: s.label
-    }))
-  }), /*#__PURE__*/React.createElement(Dropdown, {
+  }, "Clear"))), /*#__PURE__*/React.createElement(SectionLabel, null, "Density"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      alignItems: "center",
+      gap: 12,
+      width: "100%",
+      maxWidth: 460,
+      marginBottom: 20
+    }
+  }, /*#__PURE__*/React.createElement("input", {
+    type: "range",
+    min: 0.3,
+    max: 3,
+    step: 0.1,
+    value: densityVal,
+    onChange: e => setDensityVal(parseFloat(e.target.value)),
+    style: {
+      flex: 1,
+      accentColor: ACCENT,
+      height: 4
+    }
+  }), /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 12,
+      opacity: 0.6,
+      width: 36,
+      textAlign: "right",
+      fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace"
+    }
+  }, densityVal.toFixed(1) + "x")), /*#__PURE__*/React.createElement(SectionLabel, null, "Speed"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      alignItems: "center",
+      gap: 12,
+      width: "100%",
+      maxWidth: 460,
+      marginBottom: 20
+    }
+  }, /*#__PURE__*/React.createElement("input", {
+    type: "range",
+    min: 0.3,
+    max: 2.5,
+    step: 0.1,
+    value: mixSpeedVal,
+    onChange: e => setMixSpeedVal(parseFloat(e.target.value)),
+    style: {
+      flex: 1,
+      accentColor: ACCENT,
+      height: 4
+    }
+  }), /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 12,
+      opacity: 0.6,
+      width: 36,
+      textAlign: "right",
+      fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace"
+    }
+  }, mixSpeedVal.toFixed(1) + "x")), /*#__PURE__*/React.createElement(Dropdown, {
     label: "Audio Reactive (optional)",
     value: audioMode,
     onChange: v => chooseAudioMode(v),
