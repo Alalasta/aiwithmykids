@@ -3310,7 +3310,18 @@ function Visualizer() {
   }, "Undo"), /*#__PURE__*/React.createElement("button", {
     onClick: clearDrawing,
     style: tapBtnStyle
-  }, "Clear"))), /*#__PURE__*/React.createElement(SectionLabel, null, "Density"), /*#__PURE__*/React.createElement("div", {
+  }, "Clear"))), /*#__PURE__*/React.createElement(Dropdown, {
+    label: "Pattern",
+    value: patternLock || "",
+    onChange: v => setPatternLock(v || null),
+    options: [{
+      value: "",
+      label: "Random"
+    }, ...PATTERN_OPTIONS.map(po => ({
+      value: po.key,
+      label: po.label
+    }))]
+  }), /*#__PURE__*/React.createElement(SectionLabel, null, "Density"), /*#__PURE__*/React.createElement("div", {
     style: {
       display: "flex",
       alignItems: "center",
@@ -3368,7 +3379,48 @@ function Visualizer() {
       textAlign: "right",
       fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace"
     }
-  }, mixSpeedVal.toFixed(1) + "x")), /*#__PURE__*/React.createElement(Dropdown, {
+  }, mixSpeedVal.toFixed(1) + "x")), /*#__PURE__*/React.createElement(SectionLabel, null, "Kaleidoscope"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: 8,
+      marginBottom: kaleidoOn ? 12 : 20
+    }
+  }, /*#__PURE__*/React.createElement("button", {
+    onClick: () => setKaleidoOn(false),
+    style: chipPillStyle(!kaleidoOn)
+  }, "Off"), /*#__PURE__*/React.createElement("button", {
+    onClick: () => setKaleidoOn(true),
+    style: chipPillStyle(kaleidoOn)
+  }, "On")), kaleidoOn && /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      alignItems: "center",
+      gap: 12,
+      width: "100%",
+      maxWidth: 460,
+      marginBottom: 20
+    }
+  }, /*#__PURE__*/React.createElement("input", {
+    type: "range",
+    min: 3,
+    max: 16,
+    step: 1,
+    value: kaleidoSegVal,
+    onChange: e => setKaleidoSegVal(parseInt(e.target.value, 10)),
+    style: {
+      flex: 1,
+      accentColor: ACCENT,
+      height: 4
+    }
+  }), /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 12,
+      opacity: 0.6,
+      width: 36,
+      textAlign: "right",
+      fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace"
+    }
+  }, kaleidoSegVal + "x")), /*#__PURE__*/React.createElement(Dropdown, {
     label: "Audio Reactive (optional)",
     value: audioMode,
     onChange: v => chooseAudioMode(v),
