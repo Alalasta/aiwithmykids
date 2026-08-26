@@ -417,6 +417,25 @@ function elementToDataURL(el) {
     return null;
   }
 }
+// The sketch pad's snapshot canvas is a persistent object that gets
+// reused across the whole session, so its mere existence doesn't mean
+// there's actually anything drawn on it -- it could just as easily be
+// left over, fully transparent, from before someone hit Clear. This
+// checks for real pixel content so a stale-but-present canvas doesn't get
+// mistaken for an active drawing.
+function canvasHasContent(canvas) {
+  if (!canvas || !canvas.width || !canvas.height) return false;
+  try {
+    const ctx = canvas.getContext("2d");
+    const data = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+    for (let i = 3; i < data.length; i += 4) {
+      if (data[i] !== 0) return true;
+    }
+    return false;
+  } catch (e) {
+    return true;
+  }
+}
 const PALETTES = [{
   name: "Neon",
   colors: ["#ff006e", "#fb5607", "#ffbe0b", "#8338ec", "#3a86ff"]
@@ -2066,8 +2085,11 @@ function Visualizer() {
       return;
     }
     if (ct === "draw") {
-      // Same deal -- wait for an actual stroke before switching.
-      if (!drawSnapshotRef.current) return;
+      // Same deal -- wait for an actual stroke before switching. Checking
+      // for real pixel content (not just whether the snapshot canvas
+      // object exists) matters here: that canvas persists all session and
+      // could be sitting there fully transparent from an earlier Clear.
+      if (!canvasHasContent(drawSnapshotRef.current)) return;
       applyLiveContentSwap(ct, drawSnapshotRef.current, drawSnapshotRef.current.height / drawSnapshotRef.current.width || 1);
       return;
     }
