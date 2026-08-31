@@ -14,7 +14,7 @@
     font-family: 'Press Start 2P', monospace;
     overflow: hidden;
     touch-action: none;
-  }
+  } 
   #root {
     height: 100%;
     display: flex;
@@ -230,10 +230,31 @@
     color: #F4E9D8cc;
     margin-bottom: 10px;
   }
+  .builder-blurb {
+    font-size: 7px;
+    text-align: center;
+    line-height: 1.8;
+    color: #F4E9D8;
+    background: #00000022;
+    border-radius: 5px;
+    padding: 8px 6px;
+    margin-bottom: 10px;
+  }
+  .copy-msg {
+    font-size: 7.5px;
+    text-align: center;
+    color: #F4E9D8;
+    background: #2fae4a;
+    border: 2px solid #1b120c;
+    border-radius: 5px;
+    padding: 5px;
+    margin-top: 6px;
+  }
   .quick-actions {
     display: flex;
     gap: 6px;
     justify-content: center;
+    flex-wrap: wrap;
   }
   .quick-actions button {
     font-family: inherit;
@@ -624,12 +645,21 @@ const MAX_X = WORLD_W - PLAYER_W - 6;
    craft/art sellers.
 --------------------------------------------------------- */
 const MASTER_VENDORS = [
-// --- original 15 ---
+// --- original vendors (Tim's watermelon removed at your request) ---
 {
   id: "candle",
   name: "Candle",
   vendor: "Peacesake",
   price: 18,
+  awning: "#1B2A4A",
+  trim: "#D8B44A",
+  icon: "candle",
+  category: "Crafts & Home Goods"
+}, {
+  id: "candle14",
+  name: "14oz Candle",
+  vendor: "Peacesake",
+  price: 32,
   awning: "#1B2A4A",
   trim: "#D8B44A",
   icon: "candle",
@@ -688,15 +718,6 @@ const MASTER_VENDORS = [
   trim: "#F4E9D8",
   icon: "pie",
   category: "Bakery & Sweets"
-}, {
-  id: "watermelon",
-  name: "Watermelon",
-  vendor: "Tim",
-  price: 8,
-  awning: "#3E8E4A",
-  trim: "#F2C6D0",
-  icon: "melon",
-  category: "Produce"
 }, {
   id: "tomatoes",
   name: "Tomatoes",
@@ -760,9 +781,7 @@ const MASTER_VENDORS = [
   trim: "#F4E9D8",
   icon: "plant",
   category: "Flowers & Plants"
-},
-// --- 40 more, modeled on Eastern Market DC's real vendor directory ---
-{
+}, {
   id: "blueiris",
   name: "Flowers",
   vendor: "Blue Iris Flowers",
@@ -862,15 +881,6 @@ const MASTER_VENDORS = [
   icon: "poultry",
   category: "Meat & Poultry"
 }, {
-  id: "smseafood",
-  name: "Crab Meat",
-  vendor: "Southern Maryland Seafood",
-  price: 16,
-  awning: "#2E5C8E",
-  trim: "#F4E9D8",
-  icon: "seafood",
-  category: "Seafood"
-}, {
   id: "unionmeat",
   name: "Lamb Chops",
   vendor: "Union Meat Company",
@@ -880,15 +890,6 @@ const MASTER_VENDORS = [
   icon: "meat",
   category: "Meat & Poultry"
 }, {
-  id: "agora",
-  name: "Apples",
-  vendor: "Agora Farms",
-  price: 5,
-  awning: "#3E8E4A",
-  trim: "#F4E9D8",
-  icon: "produce",
-  category: "Produce"
-}, {
   id: "boso",
   name: "Roasted Nuts",
   vendor: "Boso Foods",
@@ -896,24 +897,6 @@ const MASTER_VENDORS = [
   awning: "#8C6A2E",
   trim: "#F4E9D8",
   icon: "nuts",
-  category: "Pantry & Spice"
-}, {
-  id: "buddscreek",
-  name: "Squash",
-  vendor: "Budds Creek Farm",
-  price: 4,
-  awning: "#6E9B3E",
-  trim: "#F4E9D8",
-  icon: "produce",
-  category: "Produce"
-}, {
-  id: "caribeat",
-  name: "Hot Sauce",
-  vendor: "CariBeat",
-  price: 7,
-  awning: "#B0332B",
-  trim: "#F4E9D8",
-  icon: "jar",
   category: "Pantry & Spice"
 }, {
   id: "dunhams",
@@ -934,15 +917,6 @@ const MASTER_VENDORS = [
   icon: "nuts",
   category: "Pantry & Spice"
 }, {
-  id: "gardeners",
-  name: "Greens",
-  vendor: "Gardeners Gourmet",
-  price: 4,
-  awning: "#468C3E",
-  trim: "#F4E9D8",
-  icon: "produce",
-  category: "Produce"
-}, {
   id: "honeysdesserts",
   name: "Banana Bread",
   vendor: "Honey's Desserts",
@@ -951,42 +925,6 @@ const MASTER_VENDORS = [
   trim: "#F4E9D8",
   icon: "baked",
   category: "Bakery & Sweets"
-}, {
-  id: "longmeadow",
-  name: "Corn",
-  vendor: "Long Meadow Farm",
-  price: 3,
-  awning: "#B8862E",
-  trim: "#F4E9D8",
-  icon: "produce",
-  category: "Produce"
-}, {
-  id: "mockingbird",
-  name: "Hot Peppers",
-  vendor: "Mockingbird Hill Farms",
-  price: 4,
-  awning: "#B0332B",
-  trim: "#F4E9D8",
-  icon: "produce",
-  category: "Produce"
-}, {
-  id: "moroccansaffron",
-  name: "Saffron",
-  vendor: "Moroccan Saffron",
-  price: 12,
-  awning: "#C9702B",
-  trim: "#F4E9D8",
-  icon: "spice",
-  category: "Pantry & Spice"
-}, {
-  id: "peachydairy",
-  name: "Goat Cheese",
-  vendor: "Peachy Family Dairy",
-  price: 10,
-  awning: "#D8B44A",
-  trim: "#F4E9D8",
-  icon: "cheese",
-  category: "Dairy & Cheese"
 }, {
   id: "vordonia",
   name: "Olive Oil",
@@ -997,15 +935,6 @@ const MASTER_VENDORS = [
   icon: "oliveoil",
   category: "Pantry & Spice"
 }, {
-  id: "washflowers",
-  name: "Bouquet",
-  vendor: "Washington Flower Market",
-  price: 14,
-  awning: "#8E3E6E",
-  trim: "#F4E9D8",
-  icon: "flower",
-  category: "Flowers & Plants"
-}, {
   id: "emcrepes",
   name: "Crepe",
   vendor: "Eastern Market Crepes",
@@ -1015,33 +944,6 @@ const MASTER_VENDORS = [
   icon: "togo",
   category: "Drinks & Prepared"
 }, {
-  id: "icegreen",
-  name: "Snowball",
-  vendor: "IceGreen Snowballs",
-  price: 5,
-  awning: "#2E7A9E",
-  trim: "#F4E9D8",
-  icon: "coldtreat",
-  category: "Drinks & Prepared"
-}, {
-  id: "inapickle",
-  name: "Pickles",
-  vendor: "In a Pickle",
-  price: 6,
-  awning: "#6E8F5C",
-  trim: "#F4E9D8",
-  icon: "jar",
-  category: "Pantry & Spice"
-}, {
-  id: "juliesdatery",
-  name: "Stuffed Dates",
-  vendor: "Julie's Datery",
-  price: 8,
-  awning: "#7A3B2E",
-  trim: "#F4E9D8",
-  icon: "dessert",
-  category: "Bakery & Sweets"
-}, {
   id: "freshmobile",
   name: "Limeade",
   vendor: "The Freshmobile",
@@ -1050,42 +952,6 @@ const MASTER_VENDORS = [
   trim: "#F4E9D8",
   icon: "coldtreat",
   category: "Drinks & Prepared"
-}, {
-  id: "manosdemaiz",
-  name: "Maizope",
-  vendor: "Manos de Maíz",
-  price: 8,
-  awning: "#B8862E",
-  trim: "#F4E9D8",
-  icon: "togo",
-  category: "Drinks & Prepared"
-}, {
-  id: "pinoy",
-  name: "Filipino Plate",
-  vendor: "Pinoy Kitchens",
-  price: 11,
-  awning: "#A6483A",
-  trim: "#F4E9D8",
-  icon: "togo",
-  category: "Drinks & Prepared"
-}, {
-  id: "puddin",
-  name: "Bread Pudding",
-  vendor: "PUDDIN'",
-  price: 6,
-  awning: "#8A5A34",
-  trim: "#F4E9D8",
-  icon: "dessert",
-  category: "Bakery & Sweets"
-}, {
-  id: "gingerbandar",
-  name: "Handmade Decor",
-  vendor: "Ginger Bandar",
-  price: 18,
-  awning: "#8C6A2E",
-  trim: "#F4E9D8",
-  icon: "decor",
-  category: "Crafts & Home Goods"
 }, {
   id: "billieclaire",
   name: "Art Print",
@@ -1106,25 +972,315 @@ const MASTER_VENDORS = [
   category: "Crafts & Home Goods"
 }, {
   id: "golshah",
-  name: "Jewelry",
+  name: "Painting",
   vendor: "Golshah",
+  price: 20,
+  awning: "#1B2A4A",
+  trim: "#D8B44A",
+  icon: "art",
+  category: "Crafts & Home Goods"
+},
+// --- newly added vendors ---
+{
+  id: "juliegross",
+  name: "Art Print",
+  vendor: "Julie Gross",
+  price: 20,
+  awning: "#3E5C6E",
+  trim: "#F4E9D8",
+  icon: "art",
+  category: "Crafts & Home Goods"
+}, {
+  id: "trinipepper",
+  name: "Pepper Sauce",
+  vendor: "Trini Pepper Sauce",
+  price: 7,
+  awning: "#B0332B",
+  trim: "#F4E9D8",
+  icon: "jar",
+  category: "Pantry & Spice"
+}, {
+  id: "ivyspeppa",
+  name: "Pepper Sauce",
+  vendor: "Ivy's Peppa Sauce",
+  price: 7,
+  awning: "#C9702B",
+  trim: "#F4E9D8",
+  icon: "jar",
+  category: "Pantry & Spice"
+}, {
+  id: "sunnyteppan",
+  name: "Shrimp Rice",
+  vendor: "Sunny's Teppan Grill",
+  price: 12,
+  awning: "#A6483A",
+  trim: "#F4E9D8",
+  icon: "togo",
+  category: "Drinks & Prepared"
+}, {
+  id: "yallakoshary",
+  name: "Koshary",
+  vendor: "Yalla Koshary",
+  price: 9,
+  awning: "#B8862E",
+  trim: "#F4E9D8",
+  icon: "togo",
+  category: "Drinks & Prepared"
+}, {
+  id: "dimitrioil",
+  name: "Olive Oil",
+  vendor: "Dimitri Olive Oil",
   price: 16,
+  awning: "#6E8F5C",
+  trim: "#F4E9D8",
+  icon: "oliveoil",
+  category: "Pantry & Spice"
+}, {
+  id: "habeebas",
+  name: "Skin Care",
+  vendor: "Habeeba's",
+  price: 13,
+  awning: "#B23A6E",
+  trim: "#F4E9D8",
+  icon: "soap",
+  category: "Crafts & Home Goods"
+}, {
+  id: "peacockbotanicals",
+  name: "Soap",
+  vendor: "Peacock Botanicals",
+  price: 9,
+  awning: "#2E7A73",
+  trim: "#F4E9D8",
+  icon: "soap",
+  category: "Crafts & Home Goods"
+}, {
+  id: "manchesterfungi",
+  name: "Mushrooms",
+  vendor: "Manchester Fungi",
+  price: 8,
+  awning: "#8A5A34",
+  trim: "#F4E9D8",
+  icon: "mushroom",
+  category: "Produce"
+}, {
+  id: "amourmushrooms",
+  name: "Mushrooms",
+  vendor: "Amour Mushrooms",
+  price: 8,
+  awning: "#9C6A3E",
+  trim: "#F4E9D8",
+  icon: "mushroom",
+  category: "Produce"
+}, {
+  id: "hemphoney",
+  name: "Honey",
+  vendor: "Hemp Honey Farms",
+  price: 12,
+  awning: "#B8862E",
+  trim: "#F4E9D8",
+  icon: "honey",
+  category: "Pantry & Spice"
+}, {
+  id: "jimmymann",
+  name: "Craft Item",
+  vendor: "Jimmy Mann",
+  price: 15,
+  awning: "#6E4A8E",
+  trim: "#F4E9D8",
+  icon: "decor",
+  category: "Crafts & Home Goods"
+}, {
+  id: "zanatea",
+  name: "Tea",
+  vendor: "Zana Tea",
+  price: 6,
+  awning: "#4C8F3E",
+  trim: "#F4E9D8",
+  icon: "tea",
+  category: "Drinks & Prepared"
+}, {
+  id: "zoesvegan",
+  name: "Vegan Treats",
+  vendor: "Zoe's Vegan Delights",
+  price: 8,
+  awning: "#3E8E4A",
+  trim: "#F4E9D8",
+  icon: "dessert",
+  category: "Drinks & Prepared"
+}, {
+  id: "polishpottery",
+  name: "Pottery",
+  vendor: "Polish Pottery Imports",
+  price: 26,
+  awning: "#2E5C8E",
+  trim: "#F4E9D8",
+  icon: "pottery",
+  category: "Crafts & Home Goods"
+}, {
+  id: "blendedbakery",
+  name: "GF Bundt Cake",
+  vendor: "Blended Bakery",
+  price: 14,
+  awning: "#9C6A3E",
+  trim: "#F4E9D8",
+  icon: "baked",
+  category: "Bakery & Sweets"
+}, {
+  id: "joysjewelry",
+  name: "Jewelry",
+  vendor: "Joy's Jewelry",
+  price: 18,
   awning: "#1B2A4A",
   trim: "#D8B44A",
   icon: "jewelry",
   category: "Crafts & Home Goods"
 }, {
-  id: "wovenhistory",
-  name: "Wool Rug",
-  vendor: "Woven History & Silk Road",
-  price: 25,
-  awning: "#2F6E3A",
+  id: "ashtonfarms",
+  name: "Produce",
+  vendor: "Ashton Farms",
+  price: 5,
+  awning: "#4C8F3E",
   trim: "#F4E9D8",
-  icon: "decor",
+  icon: "produce",
+  category: "Produce"
+}, {
+  id: "decojewelry",
+  name: "Jewelry",
+  vendor: "Deco Jewelry",
+  price: 20,
+  awning: "#2E5C8E",
+  trim: "#D8B44A",
+  icon: "jewelry",
+  category: "Crafts & Home Goods"
+}, {
+  id: "geedacandles",
+  name: "Candle",
+  vendor: "Geeda Candles",
+  price: 16,
+  awning: "#7A3B2E",
+  trim: "#D8B44A",
+  icon: "candle",
+  category: "Crafts & Home Goods"
+}, {
+  id: "scarvelous",
+  name: "Handbag",
+  vendor: "Scarvelous",
+  price: 28,
+  awning: "#8E3E6E",
+  trim: "#F4E9D8",
+  icon: "bag",
+  category: "Crafts & Home Goods"
+}, {
+  id: "karmiccollection",
+  name: "Jewelry",
+  vendor: "Karmic Collection",
+  price: 22,
+  awning: "#6E4A8E",
+  trim: "#D8B44A",
+  icon: "jewelry",
+  category: "Crafts & Home Goods"
+}, {
+  id: "legendarybowties",
+  name: "Bowtie",
+  vendor: "Legendary Bowties",
+  price: 14,
+  awning: "#3E5C6E",
+  trim: "#F4E9D8",
+  icon: "bowtie",
+  category: "Crafts & Home Goods"
+}, {
+  id: "freehuggs",
+  name: "Photo Print",
+  vendor: "Freehuggs",
+  price: 20,
+  awning: "#5C4530",
+  trim: "#F4E9D8",
+  icon: "camera",
+  category: "Crafts & Home Goods"
+}, {
+  id: "artbydina",
+  name: "Art Print",
+  vendor: "Art by Dina",
+  price: 18,
+  awning: "#B23A6E",
+  trim: "#F4E9D8",
+  icon: "art",
+  category: "Crafts & Home Goods"
+}, {
+  id: "mirasadesigns",
+  name: "Shirt",
+  vendor: "Mirasa Designs",
+  price: 22,
+  awning: "#2E7A9E",
+  trim: "#F4E9D8",
+  icon: "shirt",
+  category: "Crafts & Home Goods"
+}, {
+  id: "rebounddesigns",
+  name: "Book Page Coaster",
+  vendor: "Rebound Designs",
+  price: 8,
+  awning: "#8C6A2E",
+  trim: "#F4E9D8",
+  icon: "coaster",
+  category: "Crafts & Home Goods"
+}, {
+  id: "pridonart",
+  name: "Art Print",
+  vendor: "Pridon Art",
+  price: 18,
+  awning: "#6E4A8E",
+  trim: "#F4E9D8",
+  icon: "art",
+  category: "Crafts & Home Goods"
+}, {
+  id: "lilfishy",
+  name: "Fish Charm",
+  vendor: "Lil Fishy",
+  price: 10,
+  awning: "#2E5C8E",
+  trim: "#F4E9D8",
+  icon: "jewelry",
+  category: "Crafts & Home Goods"
+}, {
+  id: "ecocotton",
+  name: "Cotton Textile",
+  vendor: "Eco Cotton Threads",
+  price: 16,
+  awning: "#4C8F3E",
+  trim: "#F4E9D8",
+  icon: "textile",
+  category: "Crafts & Home Goods"
+}, {
+  id: "elpiquin",
+  name: "Burrito",
+  vendor: "El Piquin",
+  price: 10,
+  awning: "#B0332B",
+  trim: "#F4E9D8",
+  icon: "togo",
+  category: "Drinks & Prepared"
+}, {
+  id: "cherifmamadou",
+  name: "Original Painting",
+  vendor: "Cherif Mamadou",
+  price: 200,
+  awning: "#7A3B2E",
+  trim: "#D8B44A",
+  icon: "art",
+  category: "Crafts & Home Goods"
+}, {
+  id: "saidisart",
+  name: "Original Painting",
+  vendor: "Saidis Art",
+  price: 300,
+  awning: "#1B2A4A",
+  trim: "#D8B44A",
+  icon: "art",
   category: "Crafts & Home Goods"
 }];
 const CATEGORIES = ["Produce", "Meat & Poultry", "Seafood", "Dairy & Cheese", "Bakery & Sweets", "Pantry & Spice", "Flowers & Plants", "Drinks & Prepared", "Crafts & Home Goods"];
-const CLASSIC_IDS = ["candle", "baguette", "coffee", "soap", "kimchi", "bento", "pie", "watermelon", "tomatoes", "honey", "lettuce", "baklava", "board", "chai", "plant"];
+const CLASSIC_IDS = ["candle", "baguette", "coffee", "soap", "kimchi", "bento", "pie", "tomatoes", "honey", "lettuce", "baklava", "board", "chai", "plant"];
 function computeBarrierPos(b, t) {
   if (b.type === "cart") {
     const x = b.midX + b.amp * Math.sin(t * b.speed + b.phase);
@@ -1419,14 +1575,25 @@ function drawStall(ctx, item, collected, canAfford) {
   }
   drawIcon(ctx, item.icon, x + w / 2, y + h - 30, collected);
   ctx.font = "bold 8.5px monospace";
-  ctx.fillStyle = "#1b120c";
   ctx.textAlign = "center";
-  ctx.fillText(item.name, x + w / 2, y + h + 13);
+  const nameText = item.name;
+  const ntw = ctx.measureText(nameText).width;
+  const nameTagX = x + w / 2 - ntw / 2 - 4,
+    nameTagY = y + h + 4,
+    nameTagW = ntw + 8,
+    nameTagH = 13;
+  ctx.fillStyle = "#F4E9D8";
+  ctx.fillRect(nameTagX, nameTagY, nameTagW, nameTagH);
+  ctx.strokeStyle = "#1b120c";
+  ctx.lineWidth = 1.5;
+  ctx.strokeRect(nameTagX, nameTagY, nameTagW, nameTagH);
+  ctx.fillStyle = "#1b120c";
+  ctx.fillText(nameText, x + w / 2, nameTagY + 10);
   ctx.font = "bold 10px monospace";
   const priceText = "$" + item.price;
   const ptw = ctx.measureText(priceText).width;
   const tagX = x + w / 2 - ptw / 2 - 5,
-    tagY = y + h + 18,
+    tagY = y + h + 20,
     tagW = ptw + 10,
     tagH = 15;
   ctx.fillStyle = "#F4E9D8";
@@ -1969,6 +2136,139 @@ function drawIcon(ctx, type, cx, cy, dim) {
       ctx.lineTo(8, -1);
       ctx.stroke();
       break;
+    case "mushroom":
+      ctx.fillStyle = "#B0332B";
+      ctx.beginPath();
+      ctx.arc(0, -2, 9, Math.PI, 0);
+      ctx.fill();
+      ctx.fillStyle = "#F4E9D8";
+      [[-4, -4], [3, -6], [0, -1]].forEach(([dx, dy]) => {
+        ctx.beginPath();
+        ctx.arc(dx, dy, 1.3, 0, Math.PI * 2);
+        ctx.fill();
+      });
+      ctx.fillStyle = "#E8D8B0";
+      ctx.fillRect(-3, -2, 6, 10);
+      break;
+    case "tea":
+      ctx.fillStyle = "#4C8F3E";
+      ctx.beginPath();
+      ctx.ellipse(-1, 2, 9, 7, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "#2F6E3A";
+      ctx.beginPath();
+      ctx.moveTo(7, 0);
+      ctx.lineTo(13, -3);
+      ctx.lineTo(9, 3);
+      ctx.closePath();
+      ctx.fill();
+      ctx.strokeStyle = "#2F6E3A";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(-8, 2, 4, Math.PI * 0.3, Math.PI * 1.7);
+      ctx.stroke();
+      ctx.fillStyle = "#8C6A1E";
+      ctx.beginPath();
+      ctx.ellipse(-1, -5, 4, 2, 0, 0, Math.PI * 2);
+      ctx.fill();
+      break;
+    case "bag":
+      ctx.fillStyle = "#8E3E6E";
+      ctx.beginPath();
+      ctx.moveTo(-9, -2);
+      ctx.lineTo(9, -2);
+      ctx.lineTo(7, 10);
+      ctx.lineTo(-7, 10);
+      ctx.closePath();
+      ctx.fill();
+      ctx.strokeStyle = "#5C2848";
+      ctx.lineWidth = 1.6;
+      ctx.beginPath();
+      ctx.arc(0, -2, 6, Math.PI, 0);
+      ctx.stroke();
+      ctx.fillStyle = "#D8B44A";
+      ctx.beginPath();
+      ctx.arc(0, 1, 1.6, 0, Math.PI * 2);
+      ctx.fill();
+      break;
+    case "bowtie":
+      ctx.fillStyle = "#3E5C6E";
+      ctx.beginPath();
+      ctx.moveTo(-9, -6);
+      ctx.lineTo(-1, 0);
+      ctx.lineTo(-9, 6);
+      ctx.closePath();
+      ctx.fill();
+      ctx.beginPath();
+      ctx.moveTo(9, -6);
+      ctx.lineTo(1, 0);
+      ctx.lineTo(9, 6);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = "#D8B44A";
+      ctx.fillRect(-2, -3, 4, 6);
+      break;
+    case "camera":
+      ctx.fillStyle = "#3a2418";
+      ctx.fillRect(-10, -5, 20, 13);
+      ctx.fillRect(-4, -9, 9, 4);
+      ctx.fillStyle = "#7BC8E8";
+      ctx.beginPath();
+      ctx.arc(0, 1, 5.5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "#3a2418";
+      ctx.beginPath();
+      ctx.arc(0, 1, 3, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "#E68AB8";
+      ctx.fillRect(6, -3, 2.5, 2.5);
+      break;
+    case "shirt":
+      ctx.fillStyle = "#2E7A9E";
+      ctx.beginPath();
+      ctx.moveTo(-4, -8);
+      ctx.lineTo(4, -8);
+      ctx.lineTo(9, -4);
+      ctx.lineTo(6, -1);
+      ctx.lineTo(5, -3);
+      ctx.lineTo(5, 9);
+      ctx.lineTo(-5, 9);
+      ctx.lineTo(-5, -3);
+      ctx.lineTo(-6, -1);
+      ctx.lineTo(-9, -4);
+      ctx.closePath();
+      ctx.fill();
+      ctx.strokeStyle = "#1B2A4A";
+      ctx.lineWidth = 1;
+      ctx.stroke();
+      break;
+    case "coaster":
+      ctx.fillStyle = "#E8D8B0";
+      ctx.fillRect(-9, -9, 18, 18);
+      ctx.strokeStyle = "#B8955E";
+      ctx.lineWidth = 1.4;
+      ctx.strokeRect(-9, -9, 18, 18);
+      ctx.strokeStyle = "#9C6A3E";
+      ctx.lineWidth = 1;
+      for (let i = -5; i <= 5; i += 4) {
+        ctx.beginPath();
+        ctx.moveTo(-6, i);
+        ctx.lineTo(6, i);
+        ctx.stroke();
+      }
+      break;
+    case "textile":
+      ["#4C8F3E", "#B23A6E", "#D8B44A"].forEach((c, i) => {
+        ctx.fillStyle = c;
+        ctx.beginPath();
+        ctx.moveTo(-9, -6 + i * 5);
+        ctx.lineTo(9, -8 + i * 5);
+        ctx.lineTo(9, -3 + i * 5);
+        ctx.lineTo(-9, -1 + i * 5);
+        ctx.closePath();
+        ctx.fill();
+      });
+      break;
   }
   ctx.restore();
 }
@@ -1996,34 +2296,107 @@ function drawFlag(ctx, worldH) {
 }
 function drawBarrier(ctx, b, pos) {
   if (b.type === "cart") {
-    ctx.fillStyle = "#7a7a7a";
-    ctx.fillRect(pos.x, pos.y, b.w, b.h);
-    ctx.fillStyle = "#4a4a4a";
+    const x = pos.x,
+      y = pos.y,
+      w = b.w,
+      h = b.h;
+    ctx.strokeStyle = "#4a4a4a";
+    ctx.lineWidth = 1;
     ctx.beginPath();
-    ctx.arc(pos.x + 7, pos.y + b.h, 5, 0, Math.PI * 2);
-    ctx.fill();
+    ctx.moveTo(x + w - 2, y + 2);
+    ctx.lineTo(x + w + 5, y - 5);
+    ctx.stroke();
     ctx.beginPath();
-    ctx.arc(pos.x + b.w - 7, pos.y + b.h, 5, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.strokeStyle = "#2a2a2a";
-    ctx.lineWidth = 1.5;
-    ctx.strokeRect(pos.x + 3, pos.y + 3, b.w - 6, b.h - 9);
-  } else {
-    ctx.fillStyle = "#5a5a5a";
+    ctx.moveTo(x + w + 5, y - 8);
+    ctx.lineTo(x + w + 5, y - 2);
+    ctx.stroke();
+    ctx.fillStyle = "#d4d4d4";
     ctx.beginPath();
-    ctx.ellipse(pos.x + b.w / 2, pos.y + b.h / 2, b.w / 2, b.h / 2, 0, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = "#e8b04a";
-    ctx.beginPath();
-    ctx.moveTo(pos.x + b.w, pos.y + b.h / 2);
-    ctx.lineTo(pos.x + b.w + 5, pos.y + b.h / 2 - 2);
-    ctx.lineTo(pos.x + b.w + 5, pos.y + b.h / 2 + 2);
+    ctx.moveTo(x + 2, y + 2);
+    ctx.lineTo(x + w - 2, y + 2);
+    ctx.lineTo(x + w - 6, y + h - 8);
+    ctx.lineTo(x + 6, y + h - 8);
     ctx.closePath();
     ctx.fill();
-    ctx.fillStyle = "#fff";
+    ctx.strokeStyle = "#5a5a5a";
+    ctx.lineWidth = 1.4;
+    ctx.stroke();
+    for (let i = 1; i < 4; i++) {
+      const gx1 = x + 2 + i * (w - 4) / 4,
+        gx2 = x + 6 + i * (w - 12) / 4;
+      ctx.beginPath();
+      ctx.moveTo(gx1, y + 2);
+      ctx.lineTo(gx2, y + h - 8);
+      ctx.stroke();
+    }
     ctx.beginPath();
-    ctx.arc(pos.x + b.w - 4, pos.y + b.h / 2 - 3, 1.6, 0, Math.PI * 2);
+    ctx.moveTo(x + 3, y + (h - 6) / 2 + 2);
+    ctx.lineTo(x + w - 3, y + (h - 6) / 2 + 2);
+    ctx.stroke();
+    ctx.fillStyle = "#2a2a2a";
+    ctx.beginPath();
+    ctx.arc(x + 8, y + h - 2, 4, 0, Math.PI * 2);
     ctx.fill();
+    ctx.beginPath();
+    ctx.arc(x + w - 8, y + h - 2, 4, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = "#888";
+    ctx.beginPath();
+    ctx.arc(x + 8, y + h - 2, 1.4, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(x + w - 8, y + h - 2, 1.4, 0, Math.PI * 2);
+    ctx.fill();
+  } else {
+    const cx = pos.x + b.w / 2,
+      cy = pos.y + b.h / 2;
+    ctx.fillStyle = "#8a929e";
+    ctx.beginPath();
+    ctx.ellipse(cx - 1, cy + 1, b.w * 0.4, b.h * 0.4, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = "#6b7280";
+    ctx.beginPath();
+    ctx.moveTo(cx - b.w * 0.34, cy);
+    ctx.lineTo(cx - b.w * 0.62, cy - 5);
+    ctx.lineTo(cx - b.w * 0.58, cy + 1);
+    ctx.lineTo(cx - b.w * 0.62, cy + 6);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = "#9099a6";
+    ctx.beginPath();
+    ctx.arc(cx + b.w * 0.28, cy - b.h * 0.24, b.h * 0.26, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = "#5b8a6e";
+    ctx.beginPath();
+    ctx.arc(cx + b.w * 0.2, cy - b.h * 0.08, 2.4, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = "#1b120c";
+    ctx.beginPath();
+    ctx.arc(cx + b.w * 0.34, cy - b.h * 0.28, 1.3, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = "#e0a23e";
+    ctx.beginPath();
+    ctx.moveTo(cx + b.w * 0.4, cy - b.h * 0.22);
+    ctx.lineTo(cx + b.w * 0.52, cy - b.h * 0.17);
+    ctx.lineTo(cx + b.w * 0.4, cy - b.h * 0.12);
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = "#4b5563";
+    ctx.lineWidth = 1.4;
+    ctx.beginPath();
+    ctx.moveTo(cx - b.w * 0.1, cy - b.h * 0.12);
+    ctx.quadraticCurveTo(cx + b.w * 0.02, cy + b.h * 0.18, cx - b.w * 0.22, cy + b.h * 0.24);
+    ctx.stroke();
+    ctx.strokeStyle = "#c9702b";
+    ctx.lineWidth = 1.3;
+    ctx.beginPath();
+    ctx.moveTo(cx - b.w * 0.05, cy + b.h * 0.32);
+    ctx.lineTo(cx - b.w * 0.05, cy + b.h * 0.5);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(cx + b.w * 0.08, cy + b.h * 0.32);
+    ctx.lineTo(cx + b.w * 0.08, cy + b.h * 0.5);
+    ctx.stroke();
   }
 }
 function drawPlayer(ctx, p) {
@@ -2038,29 +2411,43 @@ function drawPlayer(ctx, p) {
   ctx.translate(x + PLAYER_W / 2, y + PLAYER_H / 2);
   if (facing < 0) ctx.scale(-1, 1);
   if (invuln && Math.floor(invuln * 10) % 2 === 0) ctx.globalAlpha = 0.4;
-  ctx.fillStyle = "#2E4A7A";
+  ctx.lineJoin = "round";
+  ctx.strokeStyle = "#1b120c";
+  ctx.lineWidth = 1.6;
   const legOffset = walkFrame ? 3 : -3;
+  ctx.fillStyle = "#F4E9D8";
   ctx.fillRect(-8, 8 + legOffset * 0.3, 6, 10);
+  ctx.strokeRect(-8, 8 + legOffset * 0.3, 6, 10);
   ctx.fillRect(2, 10 - legOffset * 0.3, 6, 8);
-  ctx.fillStyle = "#3E8E4A";
+  ctx.strokeRect(2, 10 - legOffset * 0.3, 6, 8);
+  ctx.fillStyle = "#E8402E";
   ctx.fillRect(-9, -6, 18, 16);
+  ctx.strokeRect(-9, -6, 18, 16);
   ctx.fillStyle = "#D8B44A";
   ctx.fillRect(6, -10, 8, 12);
+  ctx.strokeRect(6, -10, 8, 12);
   ctx.strokeStyle = "#8C6A1E";
   ctx.lineWidth = 1.5;
   ctx.beginPath();
   ctx.arc(10, -10, 4, Math.PI, 0);
   ctx.stroke();
-  ctx.fillStyle = "#E8B48A";
+  ctx.fillStyle = "#F4C89A";
   ctx.beginPath();
   ctx.arc(0, -14, 7, 0, Math.PI * 2);
   ctx.fill();
-  ctx.fillStyle = "#A63A2E";
+  ctx.strokeStyle = "#1b120c";
+  ctx.lineWidth = 1.6;
+  ctx.stroke();
+  ctx.fillStyle = "#2E5C8E";
   ctx.beginPath();
   ctx.arc(0, -16, 7, Math.PI, 0);
   ctx.fill();
   ctx.fillRect(-7, -16, 14, 3);
   ctx.fillRect(2, -15, 8, 3);
+  ctx.strokeRect(-7, -16, 14, 3);
+  ctx.beginPath();
+  ctx.arc(0, -16, 7, Math.PI, 0);
+  ctx.stroke();
   ctx.restore();
 }
 
@@ -2081,6 +2468,7 @@ function Game() {
   const [showList, setShowList] = useState(false);
   const [toast, setToast] = useState(null);
   const [flash, setFlash] = useState(false);
+  const [copyMsg, setCopyMsg] = useState(null);
   const [, forceRender] = useState(0);
   const configRef = useRef(null);
   const stateRef = useRef({
@@ -2131,6 +2519,132 @@ function Game() {
   function clearAll() {
     setSelected({});
   }
+  function getSelectedItems() {
+    return MASTER_VENDORS.filter(v => selected[v.id]);
+  }
+  function getListText() {
+    const items = getSelectedItems();
+    const lines = ["EASTERN MARKET SHOPPING LIST", ""];
+    CATEGORIES.forEach(cat => {
+      const catItems = items.filter(it => it.category === cat);
+      if (!catItems.length) return;
+      lines.push(cat.toUpperCase() + ":");
+      catItems.forEach(it => lines.push("  [ ] " + it.name + " - " + it.vendor + " - $" + it.price));
+      lines.push("");
+    });
+    lines.push("Estimated total: $" + items.reduce((s, it) => s + it.price, 0));
+    return lines.join("\n");
+  }
+  function flashCopyMsg(msg) {
+    setCopyMsg(msg);
+    window.setTimeout(() => setCopyMsg(null), 1800);
+  }
+  function fallbackCopy(text) {
+    try {
+      const ta = document.createElement("textarea");
+      ta.value = text;
+      ta.style.position = "fixed";
+      ta.style.opacity = "0";
+      document.body.appendChild(ta);
+      ta.focus();
+      ta.select();
+      document.execCommand("copy");
+      document.body.removeChild(ta);
+      flashCopyMsg("Copied to clipboard!");
+    } catch (e) {
+      flashCopyMsg("Couldn't copy — try Save PNG instead");
+    }
+  }
+  function copyList() {
+    if (getSelectedItems().length === 0) {
+      flashCopyMsg("Pick some items first!");
+      return;
+    }
+    const text = getListText();
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(() => flashCopyMsg("Copied to clipboard!"), () => fallbackCopy(text));
+    } else {
+      fallbackCopy(text);
+    }
+  }
+  function downloadListPNG() {
+    const items = getSelectedItems();
+    if (items.length === 0) {
+      flashCopyMsg("Pick some items first!");
+      return;
+    }
+    const rowH = 24,
+      headerH = 84,
+      catH = 26,
+      pad = 22;
+    let catCount = 0,
+      rowCount = 0;
+    CATEGORIES.forEach(cat => {
+      const c = items.filter(it => it.category === cat);
+      if (c.length) {
+        catCount++;
+        rowCount += c.length;
+      }
+    });
+    const width = 460;
+    const height = headerH + catCount * catH + rowCount * rowH + 60;
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext("2d");
+    ctx.fillStyle = "#F4E9D8";
+    ctx.fillRect(0, 0, width, height);
+    ctx.fillStyle = "#A63A2E";
+    ctx.fillRect(0, 0, width, 60);
+    ctx.fillStyle = "#F4E9D8";
+    ctx.textAlign = "center";
+    ctx.font = "bold 20px monospace";
+    ctx.fillText("EASTERN MARKET", width / 2, 28);
+    ctx.font = "12px monospace";
+    ctx.fillText("SHOPPING LIST", width / 2, 46);
+    let y = headerH;
+    ctx.textAlign = "left";
+    CATEGORIES.forEach(cat => {
+      const catItems = items.filter(it => it.category === cat);
+      if (!catItems.length) return;
+      ctx.fillStyle = "#A63A2E";
+      ctx.font = "bold 13px monospace";
+      ctx.fillText(cat.toUpperCase(), pad, y);
+      y += catH;
+      catItems.forEach(it => {
+        ctx.strokeStyle = "#3a2418";
+        ctx.lineWidth = 1.6;
+        ctx.strokeRect(pad, y - 13, 14, 14);
+        ctx.fillStyle = "#1b120c";
+        ctx.font = "13px monospace";
+        ctx.fillText(it.name + "  (" + it.vendor + ")", pad + 22, y - 2);
+        ctx.fillStyle = "#A63A2E";
+        ctx.font = "bold 13px monospace";
+        ctx.textAlign = "right";
+        ctx.fillText("$" + it.price, width - pad, y - 2);
+        ctx.textAlign = "left";
+        y += rowH;
+      });
+    });
+    ctx.fillStyle = "#1b120c";
+    ctx.font = "bold 14px monospace";
+    ctx.fillText("Estimated total: $" + items.reduce((s, it) => s + it.price, 0), pad, y + 18);
+    canvas.toBlob(blob => {
+      if (!blob) {
+        flashCopyMsg("Couldn't generate image");
+        return;
+      }
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "eastern-market-list.png";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      flashCopyMsg("Image downloaded!");
+    });
+  }
   const showToast = useCallback((msg, bad) => {
     setToast({
       msg,
@@ -2161,15 +2675,19 @@ function Game() {
     stateRef.current.camY = 0;
     stateRef.current.collected = {};
     stateRef.current.budget = cfg.startBudget;
-    stateRef.current.status = "playing";
+    stateRef.current.status = "intro";
     stateRef.current.t = 0;
     stateRef.current.last = null;
     setBudget(cfg.startBudget);
     setCollected({});
-    setStatus("playing");
+    setStatus("intro");
     setShowList(false);
     setToast(null);
     setPhase("play");
+  }
+  function beginShopping() {
+    stateRef.current.status = "playing";
+    setStatus("playing");
   }
   useEffect(() => {
     if (phase !== "play") return;
@@ -2329,16 +2847,29 @@ function Game() {
   }, /*#__PURE__*/React.createElement("h1", null, "BUILD YOUR", /*#__PURE__*/React.createElement("br", null), "SHOPPING LIST"), /*#__PURE__*/React.createElement("div", {
     className: "builder-sub"
   }, selectedCount, " selected · est. budget $", estBudget), /*#__PURE__*/React.createElement("div", {
+    className: "builder-blurb"
+  }, "🎯 Pick what you need, then collect it all at the market.", /*#__PURE__*/React.createElement("br", null), "🛒🐦 Rolling carts & pigeons cost you money if they bump you — dodge them!"), /*#__PURE__*/React.createElement("div", {
     className: "quick-actions"
   }, /*#__PURE__*/React.createElement("button", {
     onClick: selectClassic
   }, "Classic 15"), /*#__PURE__*/React.createElement("button", {
     onClick: selectAll
-  }, "All 55"), /*#__PURE__*/React.createElement("button", {
+  }, "All ", MASTER_VENDORS.length), /*#__PURE__*/React.createElement("button", {
     onClick: clearAll
-  }, "Clear"))), /*#__PURE__*/React.createElement("div", {
+  }, "Clear")), /*#__PURE__*/React.createElement("div", {
+    className: "quick-actions",
+    style: {
+      marginTop: "6px"
+    }
+  }, /*#__PURE__*/React.createElement("button", {
+    onClick: copyList
+  }, "📋 Copy List"), /*#__PURE__*/React.createElement("button", {
+    onClick: downloadListPNG
+  }, "🖼️ Save as PNG")), copyMsg && /*#__PURE__*/React.createElement("div", {
+    className: "copy-msg"
+  }, copyMsg)), /*#__PURE__*/React.createElement("div", {
     className: "builder-list"
-  }, CATEGORIES.map(cat => /*#__PURE__*/React.createElement("div", {
+  }, CATEGORIES.filter(cat => MASTER_VENDORS.some(v => v.category === cat)).map(cat => /*#__PURE__*/React.createElement("div", {
     key: cat
   }, /*#__PURE__*/React.createElement("div", {
     className: "cat-label"
@@ -2373,14 +2904,27 @@ function Game() {
     onClick: () => setShowList(true)
   }, "LIST ", collectedCount, "/", cfg ? cfg.items.length : 0)), status === "playing" && /*#__PURE__*/React.createElement("div", {
     className: "center-hint"
-  }, "avoid carts & pigeons — they cost you $", HIT_PENALTY), toast && /*#__PURE__*/React.createElement("div", {
+  }, "get everything on your list — avoid carts & pigeons (-$", HIT_PENALTY, ")"), toast && /*#__PURE__*/React.createElement("div", {
     className: "toast" + (toast.bad ? " bad" : ""),
     key: toast.id
   }, toast.msg), flash && /*#__PURE__*/React.createElement("div", {
     className: "flash"
   }), /*#__PURE__*/React.createElement("div", {
     className: "dpad"
-  }, /*#__PURE__*/React.createElement("button", dbtnProps("up"), "▲"), /*#__PURE__*/React.createElement("button", dbtnProps("down"), "▼"), /*#__PURE__*/React.createElement("button", dbtnProps("left"), "◀"), /*#__PURE__*/React.createElement("button", dbtnProps("right"), "▶")), showList && status === "playing" && cfg && /*#__PURE__*/React.createElement("div", {
+  }, /*#__PURE__*/React.createElement("button", dbtnProps("up"), "▲"), /*#__PURE__*/React.createElement("button", dbtnProps("down"), "▼"), /*#__PURE__*/React.createElement("button", dbtnProps("left"), "◀"), /*#__PURE__*/React.createElement("button", dbtnProps("right"), "▶")), status === "intro" && /*#__PURE__*/React.createElement("div", {
+    className: "modal"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "card"
+  }, /*#__PURE__*/React.createElement("h2", null, "HOW TO SHOP"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: "8px",
+      lineHeight: "2",
+      textAlign: "center"
+    }
+  }, "🎯 GOAL: get everything on your list", /*#__PURE__*/React.createElement("br", null), "before you run out of money.", /*#__PURE__*/React.createElement("br", null), /*#__PURE__*/React.createElement("br", null), "🛒🐦 Carts & pigeons cost you $", HIT_PENALTY, /*#__PURE__*/React.createElement("br", null), "if they bump into you — dodge them!", /*#__PURE__*/React.createElement("br", null), /*#__PURE__*/React.createElement("br", null), "🕹️ Use the arrows below to walk around."), /*#__PURE__*/React.createElement("button", {
+    className: "bigbtn",
+    onClick: beginShopping
+  }, "LET'S SHOP!"))), showList && status !== "win" && status !== "lose" && cfg && /*#__PURE__*/React.createElement("div", {
     className: "modal",
     onClick: () => setShowList(false)
   }, /*#__PURE__*/React.createElement("div", {
