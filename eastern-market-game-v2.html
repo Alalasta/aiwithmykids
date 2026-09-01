@@ -14,7 +14,7 @@
     font-family: 'Press Start 2P', monospace;
     overflow: hidden;
     touch-action: none;
-  } 
+  }
   #root {
     height: 100%;
     display: flex;
@@ -647,17 +647,8 @@ const MAX_X = WORLD_W - PLAYER_W - 6;
 const MASTER_VENDORS = [
 // --- original vendors (Tim's watermelon removed at your request) ---
 {
-  id: "candle",
-  name: "Candle",
-  vendor: "Peacesake",
-  price: 18,
-  awning: "#1B2A4A",
-  trim: "#D8B44A",
-  icon: "candle",
-  category: "Crafts & Home Goods"
-}, {
   id: "candle14",
-  name: "14oz Candle",
+  name: "Candle",
   vendor: "Peacesake",
   price: 32,
   awning: "#1B2A4A",
@@ -794,7 +785,7 @@ const MASTER_VENDORS = [
   id: "bowers",
   name: "Cheese",
   vendor: "Bowers Fancy Dairy",
-  price: 9,
+  price: 25,
   awning: "#D8B44A",
   trim: "#F4E9D8",
   icon: "cheese",
@@ -917,19 +908,10 @@ const MASTER_VENDORS = [
   icon: "nuts",
   category: "Pantry & Spice"
 }, {
-  id: "honeysdesserts",
-  name: "Banana Bread",
-  vendor: "Honey's Desserts",
-  price: 8,
-  awning: "#8A5A34",
-  trim: "#F4E9D8",
-  icon: "baked",
-  category: "Bakery & Sweets"
-}, {
   id: "vordonia",
   name: "Olive Oil",
   vendor: "Vordonia Athenolia",
-  price: 15,
+  price: 20,
   awning: "#6E8F5C",
   trim: "#F4E9D8",
   icon: "oliveoil",
@@ -947,7 +929,7 @@ const MASTER_VENDORS = [
   id: "freshmobile",
   name: "Limeade",
   vendor: "The Freshmobile",
-  price: 5,
+  price: 7,
   awning: "#4C8F3E",
   trim: "#F4E9D8",
   icon: "coldtreat",
@@ -956,7 +938,7 @@ const MASTER_VENDORS = [
   id: "billieclaire",
   name: "Art Print",
   vendor: "Billie Claire",
-  price: 15,
+  price: 30,
   awning: "#3E5C6E",
   trim: "#F4E9D8",
   icon: "art",
@@ -965,7 +947,7 @@ const MASTER_VENDORS = [
   id: "femalepower",
   name: "Art Print",
   vendor: "Female Power Project",
-  price: 15,
+  price: 25,
   awning: "#6E4A8E",
   trim: "#F4E9D8",
   icon: "art",
@@ -994,7 +976,7 @@ const MASTER_VENDORS = [
   id: "trinipepper",
   name: "Pepper Sauce",
   vendor: "Trini Pepper Sauce",
-  price: 7,
+  price: 12,
   awning: "#B0332B",
   trim: "#F4E9D8",
   icon: "jar",
@@ -1003,7 +985,7 @@ const MASTER_VENDORS = [
   id: "ivyspeppa",
   name: "Pepper Sauce",
   vendor: "Ivy's Peppa Sauce",
-  price: 7,
+  price: 15,
   awning: "#C9702B",
   trim: "#F4E9D8",
   icon: "jar",
@@ -1021,7 +1003,7 @@ const MASTER_VENDORS = [
   id: "yallakoshary",
   name: "Koshary",
   vendor: "Yalla Koshary",
-  price: 9,
+  price: 12,
   awning: "#B8862E",
   trim: "#F4E9D8",
   icon: "togo",
@@ -1147,7 +1129,7 @@ const MASTER_VENDORS = [
   id: "decojewelry",
   name: "Jewelry",
   vendor: "Deco Jewelry",
-  price: 20,
+  price: 40,
   awning: "#2E5C8E",
   trim: "#D8B44A",
   icon: "jewelry",
@@ -1199,9 +1181,9 @@ const MASTER_VENDORS = [
   category: "Crafts & Home Goods"
 }, {
   id: "artbydina",
-  name: "Art Print",
+  name: "Original Painting",
   vendor: "Art by Dina",
-  price: 18,
+  price: 400,
   awning: "#B23A6E",
   trim: "#F4E9D8",
   icon: "art",
@@ -1235,18 +1217,18 @@ const MASTER_VENDORS = [
   category: "Crafts & Home Goods"
 }, {
   id: "lilfishy",
-  name: "Fish Charm",
+  name: "Kids Clothing",
   vendor: "Lil Fishy",
-  price: 10,
+  price: 25,
   awning: "#2E5C8E",
   trim: "#F4E9D8",
-  icon: "jewelry",
+  icon: "shirt",
   category: "Crafts & Home Goods"
 }, {
   id: "ecocotton",
   name: "Cotton Textile",
   vendor: "Eco Cotton Threads",
-  price: 16,
+  price: 60,
   awning: "#4C8F3E",
   trim: "#F4E9D8",
   icon: "textile",
@@ -1278,9 +1260,272 @@ const MASTER_VENDORS = [
   trim: "#D8B44A",
   icon: "art",
   category: "Crafts & Home Goods"
+},
+// --- newest batch ---
+{
+  id: "blacksesame",
+  name: "Onigiri",
+  vendor: "Black Sesame",
+  price: 5,
+  awning: "#3a2418",
+  trim: "#F4E9D8",
+  icon: "togo",
+  category: "Drinks & Prepared"
+}, {
+  id: "spicywater",
+  name: "Shrimp Salad",
+  vendor: "Spicy Water",
+  price: 15,
+  awning: "#B0332B",
+  trim: "#F4E9D8",
+  icon: "togo",
+  category: "Drinks & Prepared"
+}, {
+  id: "myalfajores",
+  name: "Alfajores",
+  vendor: "My Alfajores",
+  price: 5,
+  awning: "#9C6A3E",
+  trim: "#F4E9D8",
+  icon: "dessert",
+  category: "Bakery & Sweets"
+}, {
+  id: "chefewa",
+  name: "Pierogis",
+  vendor: "Chef Ewa",
+  price: 13,
+  awning: "#C9A23E",
+  trim: "#F4E9D8",
+  icon: "togo",
+  category: "Drinks & Prepared"
+}, {
+  id: "whynot",
+  name: "Empanadas",
+  vendor: "Why Not",
+  price: 9,
+  awning: "#C97A2B",
+  trim: "#F4E9D8",
+  icon: "togo",
+  category: "Drinks & Prepared"
+}, {
+  id: "steelbeach",
+  name: "BBQ Plate",
+  vendor: "Steel Beach Smokehouse",
+  price: 14,
+  awning: "#5C4530",
+  trim: "#F4E9D8",
+  icon: "togo",
+  category: "Drinks & Prepared"
+}, {
+  id: "thaiorchid",
+  name: "Mango Rice",
+  vendor: "Thai Orchid",
+  price: 9,
+  awning: "#4C8F3E",
+  trim: "#F4E9D8",
+  icon: "togo",
+  category: "Drinks & Prepared"
+}, {
+  id: "emfreshwaters",
+  name: "Juice",
+  vendor: "Eastern Market Fresh Waters",
+  price: 6,
+  awning: "#2E7A9E",
+  trim: "#F4E9D8",
+  icon: "coldtreat",
+  category: "Drinks & Prepared"
+}, {
+  id: "hippiesippin",
+  name: "Acai Bowl",
+  vendor: "Hippie Sippin",
+  price: 15,
+  awning: "#8E3E6E",
+  trim: "#F4E9D8",
+  icon: "dessert",
+  category: "Drinks & Prepared"
+}, {
+  id: "montes",
+  name: "Sweet Sorrel",
+  vendor: "Monte's",
+  price: 6,
+  awning: "#B0332B",
+  trim: "#F4E9D8",
+  icon: "coldtreat",
+  category: "Drinks & Prepared"
+}, {
+  id: "knitsbynoemi",
+  name: "Knitted Crafts",
+  vendor: "Knits by Noemi",
+  price: 25,
+  awning: "#8E3E6E",
+  trim: "#F4E9D8",
+  icon: "textile",
+  category: "Crafts & Home Goods"
+}, {
+  id: "ravenhook",
+  name: "Focaccia",
+  vendor: "Ravenhook Bakehouse",
+  price: 8,
+  awning: "#9C6A3E",
+  trim: "#F4E9D8",
+  icon: "baked",
+  category: "Bakery & Sweets"
+}, {
+  id: "vegheaven",
+  name: "Donuts",
+  vendor: "VegHeaven",
+  price: 6,
+  awning: "#B23A6E",
+  trim: "#F4E9D8",
+  icon: "baked",
+  category: "Bakery & Sweets"
+}, {
+  id: "roguesgallery",
+  name: "Art Print",
+  vendor: "Rogue's Gallery",
+  price: 50,
+  awning: "#1B2A4A",
+  trim: "#D8B44A",
+  icon: "art",
+  category: "Crafts & Home Goods"
+}, {
+  id: "npcloots",
+  name: "Collectible",
+  vendor: "NPC Loots & Collectibles",
+  price: 20,
+  awning: "#6E4A8E",
+  trim: "#F4E9D8",
+  icon: "decor",
+  category: "Crafts & Home Goods"
+}, {
+  id: "cascadepress",
+  name: "Art Print",
+  vendor: "Cascade Press",
+  price: 25,
+  awning: "#3E5C6E",
+  trim: "#F4E9D8",
+  icon: "art",
+  category: "Crafts & Home Goods"
+}, {
+  id: "kalageart",
+  name: "Art Print",
+  vendor: "Kalage Art",
+  price: 50,
+  awning: "#2E5C8E",
+  trim: "#F4E9D8",
+  icon: "art",
+  category: "Crafts & Home Goods"
+}, {
+  id: "handsofwanderer",
+  name: "Handmade Craft",
+  vendor: "Hands of a Wanderer",
+  price: 40,
+  awning: "#8C6A2E",
+  trim: "#F4E9D8",
+  icon: "decor",
+  category: "Crafts & Home Goods"
+}, {
+  id: "tsolomonart",
+  name: "Original Painting",
+  vendor: "Tsolomon Art",
+  price: 400,
+  awning: "#7A3B2E",
+  trim: "#D8B44A",
+  icon: "art",
+  category: "Crafts & Home Goods"
+}, {
+  id: "turtleswebjewelry",
+  name: "Jewelry",
+  vendor: "Turtle's Web",
+  price: 20,
+  awning: "#2E7A73",
+  trim: "#D8B44A",
+  icon: "jewelry",
+  category: "Crafts & Home Goods"
+}, {
+  id: "canimals",
+  name: "Recycled Craft",
+  vendor: "Canimals",
+  price: 18,
+  awning: "#4C8F3E",
+  trim: "#F4E9D8",
+  icon: "decor",
+  category: "Crafts & Home Goods"
+}, {
+  id: "toromata",
+  name: "Mirror",
+  vendor: "Toro Mata",
+  price: 35,
+  awning: "#6E4A8E",
+  trim: "#F4E9D8",
+  icon: "decor",
+  category: "Crafts & Home Goods"
+}, {
+  id: "littletibet",
+  name: "Boutique Goods",
+  vendor: "Little Tibet Boutique",
+  price: 22,
+  awning: "#B0332B",
+  trim: "#F4E9D8",
+  icon: "textile",
+  category: "Crafts & Home Goods"
+}, {
+  id: "printempspottery",
+  name: "Pottery",
+  vendor: "Printemps Pottery",
+  price: 24,
+  awning: "#6E4A8E",
+  trim: "#F4E9D8",
+  icon: "pottery",
+  category: "Crafts & Home Goods"
+}, {
+  id: "zachsasim",
+  name: "Art Print",
+  vendor: "Art by Zach Sasim",
+  price: 25,
+  awning: "#3E5C6E",
+  trim: "#F4E9D8",
+  icon: "art",
+  category: "Crafts & Home Goods"
+}, {
+  id: "bambinoglass",
+  name: "Glassware",
+  vendor: "Bambino Glassware",
+  price: 28,
+  awning: "#2E7A9E",
+  trim: "#F4E9D8",
+  icon: "pottery",
+  category: "Crafts & Home Goods"
+}, {
+  id: "rosarium",
+  name: "Book",
+  vendor: "Rosarium Publishing",
+  price: 16,
+  awning: "#1B2A4A",
+  trim: "#D8B44A",
+  icon: "book",
+  category: "Crafts & Home Goods"
+}, {
+  id: "brownbutter",
+  name: "Cookbook",
+  vendor: "Brown Butter Cookbooks",
+  price: 20,
+  awning: "#8A5A34",
+  trim: "#F4E9D8",
+  icon: "book",
+  category: "Crafts & Home Goods"
+}, {
+  id: "tunisiantouch",
+  name: "Wooden Utensils",
+  vendor: "Tunisian Touch",
+  price: 50,
+  awning: "#9C6A3E",
+  trim: "#F4E9D8",
+  icon: "decor",
+  category: "Crafts & Home Goods"
 }];
 const CATEGORIES = ["Produce", "Meat & Poultry", "Seafood", "Dairy & Cheese", "Bakery & Sweets", "Pantry & Spice", "Flowers & Plants", "Drinks & Prepared", "Crafts & Home Goods"];
-const CLASSIC_IDS = ["candle", "baguette", "coffee", "soap", "kimchi", "bento", "pie", "tomatoes", "honey", "lettuce", "baklava", "board", "chai", "plant"];
+const CLASSIC_IDS = ["candle14", "baguette", "coffee", "soap", "kimchi", "bento", "pie", "tomatoes", "honey", "lettuce", "baklava", "board", "chai", "plant"];
 function computeBarrierPos(b, t) {
   if (b.type === "cart") {
     const x = b.midX + b.amp * Math.sin(t * b.speed + b.phase);
@@ -1313,8 +1558,8 @@ function buildGame(selectedIds) {
         type: "pigeon",
         laneX: i % 2 === 0 ? 168 : 306,
         midY: laneY,
-        amp: 46 + i * 2,
-        speed: 1.5 + i * 0.07,
+        amp: 52,
+        speed: 1.55,
         phase: i * 0.9,
         w: 22,
         h: 18
@@ -1324,8 +1569,8 @@ function buildGame(selectedIds) {
       type: "cart",
       laneY,
       midX: (MIN_X + MAX_X + PLAYER_W) / 2,
-      amp: 92 + i % 4 * 4,
-      speed: 1.35 + i * 0.08,
+      amp: 94,
+      speed: 1.4,
       phase: i * 0.75,
       w: 40,
       h: 26
@@ -1462,17 +1707,6 @@ function drawBuildingSide(ctx, camY, worldH) {
     ctx.fillStyle = "#742A1F";
     ctx.fillRect(0, y, 6, ARCH_PERIOD);
     ctx.fillRect(BUILDING_W - 6, y, 6, ARCH_PERIOD);
-    ctx.fillStyle = "#1B2A4A";
-    ctx.beginPath();
-    ctx.moveTo(20, y + ARCH_PERIOD - 14);
-    ctx.lineTo(20, y + 32);
-    ctx.arc(BUILDING_W / 2, y + 32, BUILDING_W / 2 - 20, Math.PI, 0);
-    ctx.lineTo(BUILDING_W - 20, y + ARCH_PERIOD - 14);
-    ctx.closePath();
-    ctx.fill();
-    ctx.strokeStyle = "#F4E9D8";
-    ctx.lineWidth = 2;
-    ctx.stroke();
     ctx.fillStyle = "#8C2E24";
     ctx.fillRect(BUILDING_W - 4, y + 14, 26, 8);
     for (let s = 0; s < 4; s++) {
@@ -2269,6 +2503,23 @@ function drawIcon(ctx, type, cx, cy, dim) {
         ctx.fill();
       });
       break;
+    case "book":
+      ctx.fillStyle = "#3E5C6E";
+      ctx.fillRect(-8, -10, 16, 20);
+      ctx.fillStyle = "#F4E9D8";
+      ctx.fillRect(-6, -8, 12, 16);
+      ctx.strokeStyle = "#1B2A4A";
+      ctx.lineWidth = 1;
+      for (let i = -4; i <= 6; i += 4) {
+        ctx.beginPath();
+        ctx.moveTo(-4, i);
+        ctx.lineTo(4, i);
+        ctx.stroke();
+      }
+      ctx.strokeStyle = "#1B2A4A";
+      ctx.lineWidth = 1.6;
+      ctx.strokeRect(-8, -10, 16, 20);
+      break;
   }
   ctx.restore();
 }
@@ -2852,7 +3103,7 @@ function Game() {
     className: "quick-actions"
   }, /*#__PURE__*/React.createElement("button", {
     onClick: selectClassic
-  }, "Classic 15"), /*#__PURE__*/React.createElement("button", {
+  }, "Classic ", CLASSIC_IDS.length), /*#__PURE__*/React.createElement("button", {
     onClick: selectAll
   }, "All ", MASTER_VENDORS.length), /*#__PURE__*/React.createElement("button", {
     onClick: clearAll
