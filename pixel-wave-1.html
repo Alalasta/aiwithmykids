@@ -405,6 +405,14 @@ const MIDI_TARGETS = [{
   key: "shuffle",
   label: "Shuffle",
   type: "trigger"
+}, {
+  key: "blackout",
+  label: "Blackout",
+  type: "trigger"
+}, {
+  key: "strobe",
+  label: "Strobe",
+  type: "trigger"
 }];
 // Turns an <img> or <canvas> element into a portable data URL so it can be
 // sent across the BroadcastChannel to the Stage window, which has no access
@@ -879,7 +887,7 @@ function makeConfig(contentType, palette, w, h, densityMult, speedMult, customTe
       pulseSpeed: rand(0.3, 0.9)
     }));
   } else if (pattern === "digitize") {
-    trail = false;
+    trail = true;
     // Samples the uploaded image down to a small grid (once, here, not
     // per frame) and turns each cell into a single digit colored to match
     // that spot in the photo. Cheap by construction: no matter how big
@@ -981,7 +989,11 @@ function makeConfig(contentType, palette, w, h, densityMult, speedMult, customTe
     mixGlow: 1,
     trailOverride: null,
     kaleido: false,
-    kaleidoSegments: 6
+    kaleidoSegments: 6,
+    blackout: false,
+    strobe: false,
+    overlayText: "",
+    overlayShown: false
   };
 }
 function updateParticle(p, cfg, dt, w, h) {
@@ -1059,10 +1071,15 @@ function updateParticle(p, cfg, dt, w, h) {
     p.y = p.baseY + Math.sin(cfg.time * 3.2 + p.wavePhase) * amp;
     p.rotation += p.rotSpeed * dt * 0.3;
   } else if (cfg.pattern === "digitize") {
-    // Stays put -- it's a picture, not a swarm -- but flickers the digit
-    // occasionally within a close range of its actual brightness, just
-    // enough to feel alive like a digital sign rather than a static image.
-    if (Math.random() < dt * 0.15) {
+    // Stays put -- it's a picture, not a swarm -- but gets three layers of
+    // motion instead of sitting completely still: digit flicker that
+    // speeds up with the music, a bright diagonal scan band that
+    // continuously sweeps across the whole grid, and a faint idle shimmer
+    // so it's never fully static even in silence. cfg.time already
+    // incorporates the Speed fader and audio energy, so the sweep speed
+    // naturally reacts to both without any extra plumbing.
+    const energy = cfg.audio ? cfg.audio.energy : 0;
+    if (Math.random() < dt * (0.12 + energy * 0.5)) {
       const b = p.digitizeBrightness != null ? p.digitizeBrightness : 0.5;
       const jitter = clamp(b + rand(-0.08, 0.08), 0, 1);
       p.content = {
@@ -1070,6 +1087,18 @@ function updateParticle(p, cfg, dt, w, h) {
         value: String(Math.min(9, Math.floor(jitter * 10)))
       };
     }
+    const span = w + h;
+    const scanPos = cfg.time * 140 % span;
+    const dist = Math.abs(p.x + p.y - scanPos);
+    // Kept separate from the idle shimmer below on purpose: this drives
+    // the glow/highlight too, and it's only ever nonzero for the small
+    // band of particles the sweep is currently passing over. The idle
+    // shimmer touches every particle on every frame, so it stays
+    // size-only -- glow triggers a real (if small) canvas cost per
+    // particle, and applying it grid-wide would undo the whole point of
+    // this pattern being cheap.
+    p.scanGlow = Math.max(0, 1 - dist / 70);
+    p.idleShimmer = (Math.sin(cfg.time * 1.6 + p.phase) + 1) / 2 * 0.15;
   }
 }
 
@@ -1219,12 +1248,14 @@ function updateVisual(g, dt, nowMs) {
   g.particles.forEach(p => {
     updateParticle(p, g, scaledDt, g.width, g.height);
     const beatBoost = g.beatPulse * 0.55 * (g.mixBeatBoost || 1);
-    if (bassBoost || beatBoost) {
-      p.size = p.baseSize * (1 + bassBoost + beatBoost);
+    const scanBoost = p.scanGlow || 0;
+    const idleBoost = p.idleShimmer || 0;
+    if (bassBoost || beatBoost || scanBoost || idleBoost) {
+      p.size = p.baseSize * (1 + bassBoost + beatBoost + scanBoost * 0.6 + idleBoost * 0.3);
     } else if (p.size !== p.baseSize) {
       p.size = p.baseSize;
     }
-    p.glow = trebleGlow;
+    p.glow = trebleGlow + scanBoost * 0.8;
   });
   if (g.blobs) {
     const w = g.width,
@@ -1283,6 +1314,17 @@ function drawTintedDrawing(ctx, img, iw, ih, color) {
 function drawVisual(ctx, g) {
   const w = g.width,
     h = g.height;
+  if (g.blackout) {
+    ctx.fillStyle = "#000000";
+    ctx.fillRect(0, 0, w, h);
+    return;
+  }
+  if (g.strobe) {
+    const on = Math.floor(Date.now() / 90) % 2 === 0;
+    ctx.fillStyle = on ? "#ffffff" : "#000000";
+    ctx.fillRect(0, 0, w, h);
+    return;
+  }
   const trailActive = g.trailOverride == null ? g.trail : g.trailOverride;
   if (g.audio && g.audio.camMode && g.audio.videoEl && g.audio.videoEl.readyState >= 2) {
     ctx.save();
@@ -1380,6 +1422,31 @@ function drawVisual(ctx, g) {
     const flashAlpha = clamp(g.flashPulse * 0.16 * (g.mixBeatBoost || 1), 0, 0.4);
     ctx.fillStyle = "rgba(255,255,255," + flashAlpha + ")";
     ctx.fillRect(0, 0, w, h);
+  }
+  if (g.overlayShown && g.overlayText) {
+    ctx.save();
+    let size = Math.min(72, Math.max(24, w * 0.05));
+    const maxWidth = w * 0.86;
+    ctx.font = "800 " + size + "px -apple-system, sans-serif";
+    let metrics = ctx.measureText(g.overlayText);
+    while (metrics.width > maxWidth && size > 14) {
+      size -= 2;
+      ctx.font = "800 " + size + "px -apple-system, sans-serif";
+      metrics = ctx.measureText(g.overlayText);
+    }
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    const padX = 26,
+      padY = 16;
+    const barW = metrics.width + padX * 2;
+    const barH = size + padY * 2;
+    const cx = w / 2,
+      cy = h * 0.84;
+    ctx.fillStyle = "rgba(5,5,6,0.72)";
+    ctx.fillRect(cx - barW / 2, cy - barH / 2, barW, barH);
+    ctx.fillStyle = "#ffffff";
+    ctx.fillText(g.overlayText, cx, cy + size * 0.03);
+    ctx.restore();
   }
 }
 // Radial mirror kaleidoscope post-process: takes a fully-rendered frame
@@ -1494,6 +1561,10 @@ function StageOutput() {
     cfg.trailOverride = payload.trailOverrideVal === "auto" ? null : payload.trailOverrideVal === "on";
     cfg.kaleido = payload.kaleido;
     cfg.kaleidoSegments = payload.kaleidoSeg;
+    cfg.blackout = !!payload.blackout;
+    cfg.strobe = !!payload.strobe;
+    cfg.overlayText = payload.overlayText || "";
+    cfg.overlayShown = !!payload.overlayShown;
     gRef.current = cfg;
     setReady(true);
   }
@@ -1725,6 +1796,10 @@ function Visualizer() {
   const midiMappingsRef = useRef({});
   const midiLearningRef = useRef(null);
   const [previewOff, setPreviewOff] = useState(false);
+  const [blackoutOn, setBlackoutOn] = useState(false);
+  const [strobeOn, setStrobeOn] = useState(false);
+  const [overlayText, setOverlayText] = useState("");
+  const [overlayShown, setOverlayShown] = useState(false);
   const [presets, setPresets] = useState([]);
   const [showSavePreset, setShowSavePreset] = useState(false);
   const [presetNameInput, setPresetNameInput] = useState("");
@@ -1895,6 +1970,10 @@ function Visualizer() {
       trailOverrideVal,
       kaleido: g.kaleido,
       kaleidoSeg: g.kaleidoSegments,
+      blackout: g.blackout,
+      strobe: g.strobe,
+      overlayText: g.overlayText,
+      overlayShown: g.overlayShown,
       imageDataUrl: g.contentType === "logo" || g.contentType === "draw" || g.contentType === "digitize" ? elementToDataURL(g.logoImage) : null,
       imageAspect: g.logoAspect
     });
@@ -1989,6 +2068,12 @@ function Visualizer() {
         return;
       }
       setLogoStatus("Large image \u2014 optimizing\u2026");
+      // JPEG has no transparency support, so re-encoding a PNG/WebP/GIF
+      // through it was silently flattening any alpha channel to black.
+      // Only formats that were already fully opaque get the JPEG
+      // compression; anything that could have transparency stays PNG so
+      // it's actually preserved.
+      const outputType = file.type === "image/jpeg" || file.type === "image/jpg" ? "image/jpeg" : "image/png";
       const scale = Math.min(1, MAX_UPLOAD_DIMENSION / Math.max(img.naturalWidth, img.naturalHeight));
       const w = Math.max(1, Math.round(img.naturalWidth * scale));
       const h = Math.max(1, Math.round(img.naturalHeight * scale));
@@ -2007,7 +2092,7 @@ function Visualizer() {
         smallImg.onload = () => finishLogoUpload(smallImg, smallUrl, true);
         smallImg.onerror = () => setLogoStatus("Couldn't process that image");
         smallImg.src = smallUrl;
-      }, "image/jpeg", 0.85);
+      }, outputType, outputType === "image/jpeg" ? 0.85 : undefined);
     };
     img.onerror = () => {
       URL.revokeObjectURL(url);
@@ -2307,7 +2392,7 @@ function Visualizer() {
     if (targetKey === "mixSpeed") setMixSpeed(value);else if (targetKey === "mixBeat") setMixBeat(value);else if (targetKey === "mixGlow") setMixGlow(value);else if (targetKey === "kaleidoSeg") setKaleidoSeg(Math.round(value));
   }
   function applyMidiTrigger(targetKey) {
-    if (targetKey === "flash") triggerFlash();else if (targetKey === "randomizePattern") randomizePattern();else if (targetKey === "shuffle") generate();
+    if (targetKey === "flash") triggerFlash();else if (targetKey === "randomizePattern") randomizePattern();else if (targetKey === "shuffle") generate();else if (targetKey === "blackout") toggleBlackout();else if (targetKey === "strobe") toggleStrobe();
   }
   function handleMidiMessage(e) {
     const data = e.data;
@@ -2445,6 +2530,69 @@ function Visualizer() {
       gRef.current.flashPulse = 1;
     }
     bcSend("flash", {});
+  }
+  function toggleBlackout() {
+    setBlackoutOn(prev => {
+      const next = !prev;
+      const g = gRef.current;
+      if (next) {
+        setStrobeOn(false);
+        if (g) {
+          g.blackout = true;
+          g.strobe = false;
+        }
+        bcSend("mixer", {
+          blackout: true,
+          strobe: false
+        });
+      } else {
+        if (g) g.blackout = false;
+        bcSend("mixer", {
+          blackout: false
+        });
+      }
+      return next;
+    });
+  }
+  function toggleStrobe() {
+    setStrobeOn(prev => {
+      const next = !prev;
+      const g = gRef.current;
+      if (next) {
+        setBlackoutOn(false);
+        if (g) {
+          g.strobe = true;
+          g.blackout = false;
+        }
+        bcSend("mixer", {
+          strobe: true,
+          blackout: false
+        });
+      } else {
+        if (g) g.strobe = false;
+        bcSend("mixer", {
+          strobe: false
+        });
+      }
+      return next;
+    });
+  }
+  function liveOverlayText(text) {
+    setOverlayText(text);
+    if (gRef.current) gRef.current.overlayText = text;
+    bcSend("mixer", {
+      overlayText: text
+    });
+  }
+  function toggleOverlayShown() {
+    setOverlayShown(prev => {
+      const next = !prev;
+      if (gRef.current) gRef.current.overlayShown = next;
+      bcSend("mixer", {
+        overlayShown: next
+      });
+      return next;
+    });
   }
   async function enableCamera() {
     setAudioStatus("Requesting camera access…");
@@ -2693,6 +2841,10 @@ function Visualizer() {
     cfg.trailOverride = activeTrailOverrideVal === "auto" ? null : activeTrailOverrideVal === "on";
     cfg.kaleido = overrides.kaleido !== undefined ? overrides.kaleido : kaleidoOn;
     cfg.kaleidoSegments = overrides.kaleidoSeg !== undefined ? overrides.kaleidoSeg : kaleidoSegVal;
+    cfg.blackout = blackoutOn;
+    cfg.strobe = strobeOn;
+    cfg.overlayText = overlayText;
+    cfg.overlayShown = overlayShown;
     gRef.current = cfg;
     setPaused(false);
     setScreen("running");
@@ -2709,6 +2861,10 @@ function Visualizer() {
       trailOverrideVal: activeTrailOverrideVal,
       kaleido: cfg.kaleido,
       kaleidoSeg: cfg.kaleidoSegments,
+      blackout: cfg.blackout,
+      strobe: cfg.strobe,
+      overlayText: cfg.overlayText,
+      overlayShown: cfg.overlayShown,
       imageDataUrl: activeContentType === "logo" || activeContentType === "draw" || activeContentType === "digitize" ? elementToDataURL(imageSource) : null,
       imageAspect
     });
@@ -2905,7 +3061,7 @@ function Visualizer() {
       ...toolbarBtnStyle,
       color: stageOpen ? "#C6FF3D" : "#fff"
     }
-  }, stageOpen ? "📽 Stage ✓" : "📽 Open Stage"), /*#__PURE__*/React.createElement("div", {
+  }, stageOpen ? "Stage ✓" : "Open Stage"), /*#__PURE__*/React.createElement("div", {
     style: toolbarDividerStyle
   }), /*#__PURE__*/React.createElement("button", {
     onClick: () => setPreviewOff(v => !v),
@@ -2913,7 +3069,27 @@ function Visualizer() {
       ...toolbarBtnStyle,
       color: previewOff ? "#C6FF3D" : "#fff"
     }
-  }, previewOff ? "👁 Preview Off" : "👁 Preview On"), /*#__PURE__*/React.createElement("div", {
+  }, previewOff ? "Preview Off" : "Preview On"), /*#__PURE__*/React.createElement("div", {
+    style: toolbarDividerStyle
+  }), /*#__PURE__*/React.createElement("button", {
+    onClick: toggleBlackout,
+    style: {
+      ...toolbarBtnStyle,
+      color: blackoutOn ? "#0a0a0a" : "#ff4d4d",
+      background: blackoutOn ? "#ff4d4d" : "transparent",
+      fontWeight: 800
+    }
+  }, "BLACKOUT"), /*#__PURE__*/React.createElement("div", {
+    style: toolbarDividerStyle
+  }), /*#__PURE__*/React.createElement("button", {
+    onClick: toggleStrobe,
+    style: {
+      ...toolbarBtnStyle,
+      color: strobeOn ? "#0a0a0a" : "#ff4d4d",
+      background: strobeOn ? "#ff4d4d" : "transparent",
+      fontWeight: 800
+    }
+  }, "STROBE"), /*#__PURE__*/React.createElement("div", {
     style: toolbarDividerStyle
   }), /*#__PURE__*/React.createElement("button", {
     onClick: () => isRecording ? stopRecording() : startRecording(),
@@ -2921,7 +3097,7 @@ function Visualizer() {
       ...toolbarBtnStyle,
       color: isRecording ? "#ff4d4d" : "#fff"
     }
-  }, isRecording ? "⏹ Stop" : "⏺ Rec"), /*#__PURE__*/React.createElement("div", {
+  }, isRecording ? "Stop" : "Rec"), /*#__PURE__*/React.createElement("div", {
     style: toolbarDividerStyle
   }), /*#__PURE__*/React.createElement("button", {
     onClick: exitToSetup,
@@ -3320,7 +3496,37 @@ function Visualizer() {
       padding: "6px 8px",
       color: "rgba(255,255,255,0.4)"
     }
-  }, "\u2715")))), recordStatus && /*#__PURE__*/React.createElement("div", {
+  }, "\u2715"))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      flexDirection: "column",
+      gap: 8
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: mixerLabelStyle
+  }, "Text Overlay"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: 8,
+      alignItems: "center"
+    }
+  }, /*#__PURE__*/React.createElement("input", {
+    type: "text",
+    value: overlayText,
+    maxLength: 60,
+    placeholder: "Song title, shoutout\u2026",
+    onChange: e => liveOverlayText(e.target.value),
+    style: {
+      ...customTextInputStyle,
+      marginBottom: 0,
+      flex: 1,
+      padding: "8px 10px",
+      fontSize: 12
+    }
+  }), /*#__PURE__*/React.createElement("button", {
+    onClick: toggleOverlayShown,
+    style: mixerTinyBtnStyle(overlayShown)
+  }, overlayShown ? "Hide" : "Show")))), recordStatus && /*#__PURE__*/React.createElement("div", {
     style: recordStatusStyle
   }, recordStatus), !showControls && /*#__PURE__*/React.createElement("button", {
     onClick: e => {
