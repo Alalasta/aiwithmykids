@@ -1,0 +1,487 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+<title>Pirates Cove: Galley Rush</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;700;800&family=Fredoka:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0; width: 100%; height: 100%;
+    overflow: hidden; background: #2a1808;
+    font-family: 'Fredoka', 'Segoe UI', Arial, sans-serif;
+    -webkit-user-select: none; user-select: none; touch-action: none;
+  }
+  #app { width: 100vw; height: 100vh; height: 100dvh; position: relative; overflow: hidden;
+    background: radial-gradient(circle at 50% 0%, #4a2c12 0%, #2a1808 75%); }
+  .heading { font-family: 'Baloo 2', 'Segoe UI', sans-serif; }
+
+  /* ---------- hud ---------- */
+  #hud {
+    position: absolute; top: 0; left: 0; right: 0; z-index: 6;
+    padding: max(12px, env(safe-area-inset-top)) 14px 0;
+    display: flex; flex-direction: column; align-items: center; gap: 6px;
+    pointer-events: none;
+  }
+  #hud.hidden { display: none; }
+  #hudTop { display: flex; justify-content: space-between; width: 100%; }
+  .pill {
+    background: rgba(0,0,0,0.4); border: 2px solid rgba(255,255,255,0.25);
+    border-radius: 999px; padding: 7px 14px; color: #fff;
+    font-family: 'Baloo 2', sans-serif; font-weight: 700; font-size: 16px; white-space: nowrap;
+  }
+  #scoreBox span { color: #ffd35c; }
+  #shiftProgressOuter {
+    width: min(400px, 90vw); height: 10px; border-radius: 8px;
+    background: rgba(255,255,255,0.2); border: 1px solid rgba(255,255,255,0.3); overflow: hidden;
+  }
+  #shiftProgressInner { height: 100%; width: 0%; background: linear-gradient(90deg,#ffd35c,#ff8a4c); }
+  #comboText {
+    color: #ffd35c; font-family: 'Baloo 2', sans-serif; font-weight: 800; font-size: 15px;
+    text-shadow: 0 2px 6px rgba(0,0,0,0.5); min-height: 18px;
+  }
+
+  /* ---------- screens ---------- */
+  .screen {
+    position: absolute; inset: 0; z-index: 10;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    text-align: center; color: #fff; padding: 22px;
+    background: radial-gradient(circle at 50% 20%, rgba(90,55,20,0.95), rgba(30,16,6,0.98));
+  }
+  .screen.hidden { display: none; }
+  #startScreen h1 {
+    font-size: clamp(24px, 7vw, 42px); line-height: 1.1; margin: 0 0 6px;
+    color: #ffd35c; text-shadow: 0 3px 0 #7a2a0a, 0 6px 14px rgba(0,0,0,0.4);
+  }
+  .tag { opacity: 0.85; margin: 0 0 14px; font-size: clamp(13px,3.4vw,17px); }
+  .legend {
+    display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px;
+    background: rgba(255,255,255,0.08); border-radius: 14px; padding: 12px 14px;
+    margin-bottom: 10px; max-width: 420px;
+  }
+  .legend .it { font-size: 26px; }
+  .howto { opacity: 0.75; font-size: clamp(12px,3.1vw,14px); max-width: 420px; margin: 10px 0 20px; }
+
+  button {
+    cursor: pointer; border: none; font-family: 'Baloo 2', sans-serif;
+    font-weight: 800; font-size: clamp(18px,4.6vw,22px); color: #3a1e06;
+    background: linear-gradient(180deg,#ffe08a,#ffb347);
+    padding: 14px 40px; border-radius: 40px;
+    box-shadow: 0 6px 0 #8a4a10, 0 10px 18px rgba(0,0,0,0.35);
+  }
+  button:active { transform: translateY(4px); box-shadow: 0 2px 0 #8a4a10, 0 4px 10px rgba(0,0,0,0.3); }
+
+  #overScreen h2 { font-size: clamp(24px,6.6vw,38px); margin: 0 0 8px; text-shadow: 0 3px 0 #7a2a0a; }
+  #finalScore {
+    font-family: 'Baloo 2', sans-serif; font-weight: 800; font-size: clamp(44px, 13vw, 78px);
+    color: #ffd35c; line-height: 1; text-shadow: 0 4px 0 #8a4a10, 0 8px 16px rgba(0,0,0,0.4); margin-bottom: 6px;
+  }
+  #statsLine { opacity: 0.85; font-size: clamp(13px,3.4vw,16px); margin-bottom: 24px; }
+
+  /* ---------- game screen ---------- */
+  #gameScreen { position: absolute; inset: 0; display: none; flex-direction: column; }
+  #gameScreen.active { display: flex; }
+  #tablesArea {
+    flex: 1; display: flex; flex-wrap: wrap; align-content: center; justify-content: center;
+    gap: 14px; padding: 84px 14px 8px;
+  }
+  .tableSlot {
+    width: 42%; max-width: 220px; min-width: 150px;
+    background: linear-gradient(180deg,#f7ecd2,#ecdcb4);
+    border: 3px solid #b8853a; border-radius: 16px;
+    padding: 10px 10px 12px; color: #3a2308;
+    box-shadow: 0 6px 14px rgba(0,0,0,0.35);
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+  }
+  .tableSlot.closed { display: none; }
+  .tableSlot.empty { opacity: 0.55; }
+  .tableSlot.selected { border-color: #ffd35c; box-shadow: 0 0 0 4px rgba(255,211,92,0.55), 0 6px 14px rgba(0,0,0,0.35); transform: translateY(-2px); }
+  .tableSlot.fail { animation: shakeCard 0.4s ease; }
+  .tableSlot.served { animation: popServed 0.35s ease; }
+  @keyframes shakeCard { 0%,100%{transform:translateX(0);} 25%{transform:translateX(-6px);} 75%{transform:translateX(6px);} }
+  @keyframes popServed { 0%{transform:scale(1);} 50%{transform:scale(1.08);} 100%{transform:scale(0);} }
+  .tableHeader { font-family: 'Baloo 2', sans-serif; font-weight: 700; font-size: 13px; opacity: 0.7; margin-bottom: 4px; }
+  .ticketRow { display: flex; justify-content: center; gap: 4px; min-height: 30px; margin-bottom: 6px; flex-wrap: wrap; }
+  .ticketIcon { font-size: 22px; position: relative; filter: none; opacity: 1; transition: opacity 0.15s, filter 0.15s; }
+  .ticketIcon.done { opacity: 0.28; filter: grayscale(1); }
+  .ticketIcon.next { animation: nextPulse 0.7s ease-in-out infinite; }
+  @keyframes nextPulse { 0%,100%{ transform: scale(1); } 50%{ transform: scale(1.22); } }
+  .waitingText { font-size: 12px; opacity: 0.7; min-height: 30px; display: flex; align-items: center; justify-content: center; }
+  .patienceBarOuter { height: 8px; border-radius: 6px; background: rgba(0,0,0,0.15); overflow: hidden; }
+  .patienceBarInner { height: 100%; width: 100%; background: #3ddc84; border-radius: 6px; }
+
+  #trayArea {
+    display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px;
+    padding: 10px max(10px, env(safe-area-inset-left)) max(10px, env(safe-area-inset-bottom));
+    background: linear-gradient(180deg,#5a3414,#3a2008);
+    border-top: 3px solid #8a5a24;
+  }
+  .ingredientBtn {
+    background: linear-gradient(180deg,#7a5024,#5a3414); border: 2px solid #a67840;
+    border-radius: 14px; color: #fff; padding: 8px 4px; box-shadow: none;
+    display: flex; flex-direction: column; align-items: center; gap: 2px;
+    font-family: 'Fredoka', sans-serif; font-size: 10px; font-weight: 500;
+  }
+  .ingredientBtn .g { font-size: 26px; }
+  .ingredientBtn.buzz { animation: shakeCard 0.3s ease; }
+  .ingredientBtn:active { transform: translateY(2px); }
+
+  .floatText {
+    position: absolute; z-index: 20; pointer-events: none;
+    font-family: 'Baloo 2', sans-serif; font-weight: 800; font-size: 18px;
+    animation: floatUp 0.9s ease forwards;
+  }
+  @keyframes floatUp { 0% { transform: translateY(0); opacity: 1; } 100% { transform: translateY(-50px); opacity: 0; } }
+</style>
+</head>
+<body>
+<div id="app">
+
+  <div id="hud" class="hidden">
+    <div id="hudTop">
+      <div id="livesBox" class="pill">❤️❤️❤️</div>
+      <div id="scoreBox" class="pill">Score <span id="scoreVal">0</span></div>
+    </div>
+    <div id="shiftProgressOuter"><div id="shiftProgressInner"></div></div>
+    <div id="comboText"></div>
+  </div>
+
+  <div id="startScreen" class="screen">
+    <h1 class="heading">🏴‍☠️ PIRATES COVE<br>GALLEY RUSH</h1>
+    <p class="tag">The dinner rush is on — keep the crew fed!</p>
+    <div class="legend">
+      <div class="it">🍗</div><div class="it">🐟</div><div class="it">🦀</div><div class="it">🍺</div>
+      <div class="it">🍹</div><div class="it">🍩</div><div class="it">🍉</div><div class="it">🍦</div>
+    </div>
+    <p class="howto">Tap a table to pick up its order, then tap the ingredients in the tray in the order shown on the ticket. Serve fast for bonus gold — but don't let a table's patience run out! 75-second shift.</p>
+    <button id="playBtn">START SHIFT</button>
+  </div>
+
+  <div id="gameScreen">
+    <div id="tablesArea"></div>
+    <div id="trayArea"></div>
+  </div>
+
+  <div id="overScreen" class="screen hidden">
+    <h2 class="heading" id="overTitle">SHIFT OVER!</h2>
+    <div id="finalScore">0</div>
+    <div id="statsLine"></div>
+    <button id="againBtn">START NEW SHIFT</button>
+  </div>
+
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  /* ---------------------------- dom ---------------------------- */
+  const app = document.getElementById('app');
+  const hud = document.getElementById('hud');
+  const scoreVal = document.getElementById('scoreVal');
+  const livesBox = document.getElementById('livesBox');
+  const shiftProgressInner = document.getElementById('shiftProgressInner');
+  const comboText = document.getElementById('comboText');
+  const startScreen = document.getElementById('startScreen');
+  const gameScreen = document.getElementById('gameScreen');
+  const overScreen = document.getElementById('overScreen');
+  const overTitle = document.getElementById('overTitle');
+  const finalScoreEl = document.getElementById('finalScore');
+  const statsLineEl = document.getElementById('statsLine');
+  const playBtn = document.getElementById('playBtn');
+  const againBtn = document.getElementById('againBtn');
+  const tablesArea = document.getElementById('tablesArea');
+  const trayArea = document.getElementById('trayArea');
+
+  /* ---------------------------- audio ---------------------------- */
+  let actx = null;
+  function audioInit() {
+    if (!actx) { try { actx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) {} }
+    else if (actx.state === 'suspended') actx.resume();
+  }
+  function tone(freq, dur, type, gain, delay, slideTo) {
+    if (!actx) return;
+    const t0 = actx.currentTime + (delay || 0);
+    const osc = actx.createOscillator(); const g = actx.createGain();
+    osc.type = type || 'sine';
+    osc.frequency.setValueAtTime(freq, t0);
+    if (slideTo) osc.frequency.exponentialRampToValueAtTime(Math.max(20, slideTo), t0 + dur);
+    g.gain.setValueAtTime(0.0001, t0);
+    g.gain.linearRampToValueAtTime(gain || 0.2, t0 + 0.02);
+    g.gain.exponentialRampToValueAtTime(0.001, t0 + dur);
+    osc.connect(g).connect(actx.destination);
+    osc.start(t0); osc.stop(t0 + dur + 0.03);
+  }
+  const sfx = {
+    correct: () => tone(760, 0.08, 'sine', 0.2),
+    wrong: () => tone(160, 0.2, 'sawtooth', 0.2, 0, 90),
+    served: () => [660, 880, 1100].forEach((f, i) => tone(f, 0.12, 'triangle', 0.22, i * 0.06)),
+    fail: () => { tone(180, 0.25, 'sawtooth', 0.2, 0, 60); tone(90, 0.3, 'sine', 0.18, 0.02); },
+    win: () => [523, 659, 784, 1046, 1318].forEach((f, i) => tone(f, 0.18, 'triangle', 0.22, i * 0.1)),
+    lose: () => [300, 220, 160].forEach((f, i) => tone(f, 0.25, 'sawtooth', 0.18, i * 0.15)),
+    start: () => { tone(440, 0.1, 'sine', 0.2, 0); tone(660, 0.12, 'sine', 0.2, 0.08); }
+  };
+
+  /* ---------------------------- config ---------------------------- */
+  const SHIFT_DURATION = 75;
+  const LIVES_START = 3;
+  const MAX_SLOTS = 4;
+  const WRONG_PENALTY_MS = 1500;
+  const RESPAWN_COOLDOWN = [700, 1600];
+  const INGREDIENTS = [
+    { key: 'turkey', emoji: '🍗', label: 'Turkey Leg' },
+    { key: 'fish', emoji: '🐟', label: 'Fish' },
+    { key: 'crab', emoji: '🦀', label: 'Crab Legs' },
+    { key: 'grog', emoji: '🍺', label: 'Grog' },
+    { key: 'drink', emoji: '🍹', label: 'Trop. Drink' },
+    { key: 'donut', emoji: '🍩', label: 'Donut' },
+    { key: 'melon', emoji: '🍉', label: 'Watermelon' },
+    { key: 'icecream', emoji: '🍦', label: 'Ice Cream' }
+  ];
+  const EMOJI_OF = Object.fromEntries(INGREDIENTS.map(i => [i.key, i.emoji]));
+  const SLOT_UNLOCK_PROGRESS = [0, 0, 0.3, 0.6];
+
+  /* ---------------------------- state ---------------------------- */
+  let state = 'menu';
+  let elapsed = 0, score = 0, lives = LIVES_START, combo = 0, comboMult = 1;
+  let selectedSlot = null;
+  let stats = { served: 0, fails: 0, bestCombo: 0 };
+  let slots = [];
+  let lastT = 0;
+
+  function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
+  function lerp(a, b, t) { return a + (b - a) * clamp(t, 0, 1); }
+  function rnd(n) { return Math.floor(Math.random() * n); }
+
+  /* ---------------------------- build DOM slots + tray (once) ---------------------------- */
+  for (let i = 0; i < MAX_SLOTS; i++) {
+    const el = document.createElement('div');
+    el.className = 'tableSlot closed';
+    el.innerHTML =
+      '<div class="tableHeader">Table ' + (i + 1) + '</div>' +
+      '<div class="ticketRow"></div>' +
+      '<div class="waitingText">Waiting for a customer&hellip;</div>' +
+      '<div class="patienceBarOuter"><div class="patienceBarInner"></div></div>';
+    el.addEventListener('click', () => selectSlot(i));
+    tablesArea.appendChild(el);
+    slots.push({
+      el, ticketRow: el.querySelector('.ticketRow'), waitingText: el.querySelector('.waitingText'),
+      barInner: el.querySelector('.patienceBarInner'),
+      open: false, ticket: null, respawnTimer: 0
+    });
+  }
+  INGREDIENTS.forEach(ing => {
+    const btn = document.createElement('button');
+    btn.className = 'ingredientBtn';
+    btn.innerHTML = '<span class="g">' + ing.emoji + '</span><span>' + ing.label + '</span>';
+    btn.addEventListener('click', () => tapIngredient(ing.key, btn));
+    trayArea.appendChild(btn);
+  });
+
+  /* ---------------------------- floating text ---------------------------- */
+  function floatText(x, y, text, color) {
+    const el = document.createElement('div');
+    el.className = 'floatText';
+    el.textContent = text;
+    el.style.left = x + 'px'; el.style.top = y + 'px'; el.style.color = color;
+    el.style.transform = 'translate(-50%,-50%)';
+    app.appendChild(el);
+    setTimeout(() => el.remove(), 950);
+  }
+  function elCenter(node) {
+    const r = node.getBoundingClientRect();
+    return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+  }
+
+  /* ---------------------------- ticket generation ---------------------------- */
+  function pickItemCount(progress) {
+    const p3 = lerp(0, 0.35, progress), p2 = lerp(0.25, 0.45, progress);
+    const r = Math.random();
+    if (r < p3) return 3;
+    if (r < p3 + p2) return 2;
+    return 1;
+  }
+  function makeTicket(progress) {
+    const count = pickItemCount(progress);
+    const items = [];
+    for (let i = 0; i < count; i++) items.push(INGREDIENTS[rnd(INGREDIENTS.length)].key);
+    const maxPatience = lerp(9000, 5000, progress) + (count - 1) * 1500;
+    return { items, nextIndex: 0, patience: maxPatience, maxPatience };
+  }
+
+  function renderTicket(slot) {
+    const t = slot.ticket;
+    slot.el.classList.toggle('empty', !t);
+    slot.waitingText.style.display = t ? 'none' : 'flex';
+    slot.ticketRow.style.display = t ? 'flex' : 'none';
+    slot.el.querySelector('.patienceBarOuter').style.visibility = t ? 'visible' : 'hidden';
+    if (!t) { slot.ticketRow.innerHTML = ''; return; }
+    slot.ticketRow.innerHTML = t.items.map((key, i) => {
+      const cls = i < t.nextIndex ? 'done' : (i === t.nextIndex ? 'next' : '');
+      return '<span class="ticketIcon ' + cls + '">' + EMOJI_OF[key] + '</span>';
+    }).join('');
+  }
+
+  function openSlotIfDue(slot, idx, progress) {
+    if (!slot.open && progress >= SLOT_UNLOCK_PROGRESS[idx]) {
+      slot.open = true;
+      slot.el.classList.remove('closed');
+      slot.respawnTimer = 200 + rnd(500);
+    }
+  }
+
+  /* ---------------------------- interaction ---------------------------- */
+  function selectSlot(i) {
+    if (state !== 'playing') return;
+    const slot = slots[i];
+    if (!slot.open || !slot.ticket) return;
+    if (selectedSlot === i) { selectedSlot = null; } else { selectedSlot = i; }
+    slots.forEach((s, j) => s.el.classList.toggle('selected', j === selectedSlot));
+  }
+
+  function tapIngredient(key, btn) {
+    audioInit();
+    if (state !== 'playing' || selectedSlot === null) {
+      btn.classList.remove('buzz'); void btn.offsetWidth; btn.classList.add('buzz');
+      return;
+    }
+    const slot = slots[selectedSlot];
+    const t = slot.ticket;
+    if (!t) return;
+    if (t.items[t.nextIndex] === key) {
+      t.nextIndex++;
+      sfx.correct();
+      const c = elCenter(btn);
+      floatText(c.x, c.y - 20, '✓', '#3ddc84');
+      if (t.nextIndex >= t.items.length) {
+        serveTicket(slot);
+      } else {
+        renderTicket(slot);
+      }
+    } else {
+      combo = 0; comboMult = 1;
+      t.patience = Math.max(500, t.patience - WRONG_PENALTY_MS);
+      sfx.wrong();
+      slot.el.classList.remove('fail'); void slot.el.offsetWidth; slot.el.classList.add('fail');
+      btn.classList.remove('buzz'); void btn.offsetWidth; btn.classList.add('buzz');
+    }
+  }
+
+  function serveTicket(slot) {
+    const t = slot.ticket;
+    combo++; comboMult = 1 + Math.min(3, Math.floor(combo / 3));
+    stats.bestCombo = Math.max(stats.bestCombo, combo);
+    const speedFrac = t.patience / t.maxPatience;
+    const pts = t.items.length * 15 * comboMult + Math.round(20 * speedFrac);
+    score += pts; stats.served++;
+    const c = elCenter(slot.el);
+    floatText(c.x, c.y, '+' + pts, '#ffd35c');
+    sfx.served();
+    slot.el.classList.remove('served'); void slot.el.offsetWidth; slot.el.classList.add('served');
+    slot.ticket = null;
+    if (selectedSlot === slots.indexOf(slot)) selectedSlot = null;
+    slot.el.classList.remove('selected');
+    slot.respawnTimer = RESPAWN_COOLDOWN[0] + rnd(RESPAWN_COOLDOWN[1] - RESPAWN_COOLDOWN[0]);
+    setTimeout(() => { slot.el.classList.remove('served'); renderTicket(slot); }, 360);
+  }
+
+  function expireTicket(slot) {
+    lives--; combo = 0; comboMult = 1; stats.fails++;
+    const c = elCenter(slot.el);
+    floatText(c.x, c.y, '-1 ❤️', '#ff5c7a');
+    sfx.fail();
+    slot.el.classList.remove('fail'); void slot.el.offsetWidth; slot.el.classList.add('fail');
+    slot.ticket = null;
+    if (selectedSlot === slots.indexOf(slot)) selectedSlot = null;
+    slot.el.classList.remove('selected');
+    slot.respawnTimer = RESPAWN_COOLDOWN[0] + rnd(RESPAWN_COOLDOWN[1] - RESPAWN_COOLDOWN[0]);
+    renderTicket(slot);
+    if (lives <= 0) loseGame();
+  }
+
+  /* ---------------------------- update loop ---------------------------- */
+  function tick(now) {
+    const dt = Math.min(0.05, (now - lastT) / 1000);
+    lastT = now;
+    if (state === 'playing') {
+      elapsed += dt;
+      const progress = Math.min(1, elapsed / SHIFT_DURATION);
+      if (elapsed >= SHIFT_DURATION) { winGame(); }
+      else {
+        slots.forEach((slot, i) => {
+          openSlotIfDue(slot, i, progress);
+          if (!slot.open) return;
+          if (slot.ticket) {
+            slot.ticket.patience -= dt * 1000;
+            const frac = clamp(slot.ticket.patience / slot.ticket.maxPatience, 0, 1);
+            slot.barInner.style.width = (frac * 100) + '%';
+            slot.barInner.style.background = frac > 0.5 ? '#3ddc84' : (frac > 0.22 ? '#ffd35c' : '#ff5c7a');
+            if (slot.ticket.patience <= 0) expireTicket(slot);
+          } else {
+            slot.respawnTimer -= dt * 1000;
+            if (slot.respawnTimer <= 0) {
+              slot.ticket = makeTicket(progress);
+              renderTicket(slot);
+            }
+          }
+        });
+        scoreVal.textContent = Math.round(score);
+        livesBox.textContent = '❤️'.repeat(Math.max(0, lives)) + '🖤'.repeat(LIVES_START - Math.max(0, lives));
+        shiftProgressInner.style.width = (progress * 100).toFixed(1) + '%';
+        comboText.textContent = comboMult > 1 ? ('COMBO x' + comboMult) : '';
+      }
+    }
+    requestAnimationFrame(tick);
+  }
+
+  /* ---------------------------- screens ---------------------------- */
+  function resetGame() {
+    elapsed = 0; score = 0; lives = LIVES_START; combo = 0; comboMult = 1; selectedSlot = null;
+    stats = { served: 0, fails: 0, bestCombo: 0 };
+    slots.forEach((slot, i) => {
+      slot.open = false; slot.ticket = null; slot.respawnTimer = 0;
+      slot.el.classList.add('closed'); slot.el.classList.remove('selected', 'fail', 'served', 'empty');
+      renderTicket(slot);
+    });
+  }
+  function startGame() {
+    audioInit();
+    resetGame();
+    state = 'playing';
+    startScreen.classList.add('hidden');
+    overScreen.classList.add('hidden');
+    gameScreen.classList.add('active');
+    hud.classList.remove('hidden');
+    sfx.start();
+  }
+  function winGame() {
+    state = 'over';
+    hud.classList.add('hidden'); gameScreen.classList.remove('active');
+    overTitle.textContent = '🍽️ SHIFT COMPLETE!';
+    finalScoreEl.textContent = Math.round(score);
+    statsLineEl.textContent = stats.served + ' orders served · best combo x' + Math.max(1, comboMult) +
+      ' · ' + stats.fails + ' tables lost';
+    overScreen.classList.remove('hidden');
+    sfx.win();
+  }
+  function loseGame() {
+    state = 'over';
+    hud.classList.add('hidden'); gameScreen.classList.remove('active');
+    overTitle.textContent = '😤 GALLEY CLOSED!';
+    finalScoreEl.textContent = Math.round(score);
+    const pct = Math.round(Math.min(1, elapsed / SHIFT_DURATION) * 100);
+    statsLineEl.textContent = pct + '% through the shift · ' + stats.served + ' orders served';
+    overScreen.classList.remove('hidden');
+    sfx.lose();
+  }
+  playBtn.addEventListener('click', startGame);
+  againBtn.addEventListener('click', startGame);
+
+  /* ---------------------------- boot ---------------------------- */
+  requestAnimationFrame(t => { lastT = t; requestAnimationFrame(tick); });
+})();
+</script>
+</body>
+</html>
