@@ -1,0 +1,691 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+<title>Captain Crab's Crab Catch</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;700;800&family=Fredoka:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    width: 100%; height: 100%;
+    overflow: hidden;
+    background: #052a44;
+    font-family: 'Fredoka', 'Segoe UI', Arial, sans-serif;
+    -webkit-user-select: none; user-select: none;
+    touch-action: none;
+  }
+  #app {
+    width: 100vw; height: 100vh; height: 100dvh;
+    position: relative; overflow: hidden;
+  }
+  canvas { display: block; position: absolute; top: 0; left: 0; touch-action: none; }
+  ::selection { background: transparent; }
+  .heading { font-family: 'Baloo 2', 'Segoe UI', sans-serif; }
+
+  #hud {
+    position: absolute; top: 0; left: 0; right: 0;
+    display: flex; justify-content: space-between; align-items: flex-start;
+    padding: max(14px, env(safe-area-inset-top)) 16px 0;
+    pointer-events: none; z-index: 5;
+  }
+  #hud.hidden { display: none; }
+  .pill {
+    background: rgba(4,20,34,0.55);
+    border: 2px solid rgba(255,255,255,0.25);
+    border-radius: 999px;
+    padding: 8px 16px;
+    color: #fff;
+    font-family: 'Baloo 2', sans-serif;
+    font-weight: 700;
+    font-size: 18px;
+    backdrop-filter: blur(3px);
+    white-space: nowrap;
+  }
+  #scoreBox span { color: #ffd35c; }
+  #timeBox span { color: #7affc0; }
+  #timeBox.low span { color: #ff5c7a; }
+  #comboBox {
+    position: absolute; left: 50%; top: 60px; transform: translateX(-50%);
+    color: #ffd35c; font-family: 'Baloo 2', sans-serif; font-weight: 800;
+    font-size: clamp(16px,4.2vw,24px); text-shadow: 0 2px 6px rgba(0,0,0,0.5);
+    min-height: 30px;
+  }
+
+  #frenzyBanner {
+    position: absolute; top: 100px; left: 50%; transform: translateX(-50%);
+    font-family: 'Baloo 2', sans-serif; font-weight: 800;
+    font-size: clamp(18px, 5vw, 28px);
+    color: #ff8a4c; text-shadow: 0 2px 8px rgba(255,60,20,0.6);
+    animation: pulse 0.5s infinite alternate;
+    z-index: 5; pointer-events: none;
+  }
+  #frenzyBanner.hidden { display: none; }
+  @keyframes pulse { from { transform: translateX(-50%) scale(1); } to { transform: translateX(-50%) scale(1.12); } }
+
+  .screen {
+    position: absolute; inset: 0; z-index: 10;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    text-align: center; color: #fff; padding: 24px;
+    background: radial-gradient(circle at 50% 20%, rgba(20,90,140,0.92), rgba(3,20,34,0.97));
+  }
+  .screen.hidden { display: none; }
+
+  #startScreen h1 {
+    font-size: clamp(30px, 8vw, 52px);
+    line-height: 1.05;
+    margin: 0 0 6px;
+    color: #ffd35c;
+    text-shadow: 0 3px 0 #b8560a, 0 6px 14px rgba(0,0,0,0.4);
+  }
+  .tag { opacity: 0.85; margin: 0 0 20px; font-size: clamp(14px,3.6vw,18px); }
+  .legend {
+    display: grid; grid-template-columns: 1fr 1fr;
+    gap: 8px 18px; margin-bottom: 20px;
+    background: rgba(255,255,255,0.08);
+    border-radius: 16px; padding: 14px 18px;
+    font-size: clamp(13px, 3.4vw, 16px);
+  }
+  .legend div { display: flex; align-items: center; gap: 8px; white-space: nowrap; }
+  .ic { font-size: 22px; }
+  .howto { opacity: 0.75; font-size: clamp(12px,3.2vw,14px); max-width: 420px; margin: 0 0 22px; }
+
+  button {
+    cursor: pointer; border: none; font-family: 'Baloo 2', sans-serif;
+    font-weight: 800; font-size: clamp(18px,4.6vw,22px);
+    color: #052a44; background: linear-gradient(180deg,#ffe08a,#ffb347);
+    padding: 14px 40px; border-radius: 40px;
+    box-shadow: 0 6px 0 #b8560a, 0 10px 18px rgba(0,0,0,0.35);
+    transition: transform 0.08s ease;
+  }
+  button:active { transform: translateY(4px); box-shadow: 0 2px 0 #b8560a, 0 4px 10px rgba(0,0,0,0.3); }
+
+  #overScreen h2 {
+    font-size: clamp(26px,7vw,40px); margin: 0 0 8px; color: #ff8a4c;
+    text-shadow: 0 3px 0 #7a2a0a;
+  }
+  #finalScore {
+    font-family: 'Baloo 2', sans-serif; font-weight: 800;
+    font-size: clamp(48px, 14vw, 84px); color: #ffd35c; line-height: 1;
+    text-shadow: 0 4px 0 #b8560a, 0 8px 16px rgba(0,0,0,0.4);
+    margin-bottom: 6px;
+  }
+  #statsLine { opacity: 0.85; font-size: clamp(14px,3.6vw,17px); margin-bottom: 26px; }
+
+  .hint {
+    position: absolute; bottom: max(18px, env(safe-area-inset-bottom));
+    left: 50%; transform: translateX(-50%);
+    color: rgba(255,255,255,0.6); font-size: 13px; z-index: 4; pointer-events: none;
+  }
+</style>
+</head>
+<body>
+<div id="app">
+  <canvas id="canvas"></canvas>
+
+  <div id="hud" class="hidden">
+    <div id="scoreBox" class="pill">Score <span id="scoreVal">0</span></div>
+    <div id="timeBox" class="pill">⏱ <span id="timeVal">60</span></div>
+  </div>
+  <div id="comboBox"></div>
+  <div id="frenzyBanner" class="hidden">🔥 FRENZY! 🔥</div>
+
+  <div id="startScreen" class="screen">
+    <h1 class="heading">CAPTAIN CRAB'S<br>CRAB CATCH</h1>
+    <p class="tag">Steer the boat. Catch the crabs. Dodge the mess.</p>
+    <div class="legend">
+      <div><span class="ic">🦀</span> Blue Crab &nbsp;+10</div>
+      <div><span class="ic">⭐</span> Golden Crab +50</div>
+      <div><span class="ic">🐙</span> Octopus &nbsp;&minus;10</div>
+      <div><span class="ic">🧨</span> Pirate Mine &minus;time</div>
+      <div><span class="ic">💎</span> Treasure Crab JACKPOT</div>
+    </div>
+    <p class="howto">Touch and drag anywhere on the water — your boat sits just above your finger so you can always see it. Arrow keys / WASD also work on desktop. 60 frantic seconds — go catch some crabs!</p>
+    <button id="playBtn">SET SAIL</button>
+  </div>
+
+  <div id="overScreen" class="screen hidden">
+    <h2 class="heading">TIME'S UP!</h2>
+    <div id="finalScore">0</div>
+    <div id="statsLine"></div>
+    <button id="againBtn">PLAY AGAIN</button>
+  </div>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  /* ---------------------------- setup ---------------------------- */
+  const canvas = document.getElementById('canvas');
+  const ctx = canvas.getContext('2d');
+  const hud = document.getElementById('hud');
+  const scoreVal = document.getElementById('scoreVal');
+  const timeVal = document.getElementById('timeVal');
+  const timeBox = document.getElementById('timeBox');
+  const comboBox = document.getElementById('comboBox');
+  const startScreen = document.getElementById('startScreen');
+  const overScreen = document.getElementById('overScreen');
+  const finalScoreEl = document.getElementById('finalScore');
+  const statsLineEl = document.getElementById('statsLine');
+  const playBtn = document.getElementById('playBtn');
+  const againBtn = document.getElementById('againBtn');
+  const frenzyBanner = document.getElementById('frenzyBanner');
+
+  let W = 0, H = 0, DPR = 1;
+  function resize() {
+    DPR = Math.min(window.devicePixelRatio || 1, 2);
+    W = window.innerWidth; H = window.innerHeight;
+    canvas.width = Math.round(W * DPR);
+    canvas.height = Math.round(H * DPR);
+    canvas.style.width = W + 'px';
+    canvas.style.height = H + 'px';
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    computePylons();
+  }
+  window.addEventListener('resize', resize);
+  window.addEventListener('orientationchange', resize);
+
+  /* ---------------------------- audio ---------------------------- */
+  let actx = null;
+  function audioInit() {
+    if (!actx) {
+      try { actx = new (window.AudioContext || window.webkitAudioContext)(); }
+      catch (e) { /* no audio support, ignore */ }
+    } else if (actx.state === 'suspended') {
+      actx.resume();
+    }
+  }
+  function tone(freq, dur, type, gain, delay, slideTo) {
+    if (!actx) return;
+    const t0 = actx.currentTime + (delay || 0);
+    const osc = actx.createOscillator();
+    const g = actx.createGain();
+    osc.type = type || 'sine';
+    osc.frequency.setValueAtTime(freq, t0);
+    if (slideTo) osc.frequency.exponentialRampToValueAtTime(Math.max(20, slideTo), t0 + dur);
+    g.gain.setValueAtTime(0.0001, t0);
+    g.gain.linearRampToValueAtTime(gain || 0.2, t0 + 0.02);
+    g.gain.exponentialRampToValueAtTime(0.001, t0 + dur);
+    osc.connect(g).connect(actx.destination);
+    osc.start(t0); osc.stop(t0 + dur + 0.03);
+  }
+  const sfx = {
+    blue: () => tone(660, 0.12, 'sine', 0.22),
+    golden: () => { tone(880, 0.1, 'triangle', 0.22, 0); tone(1180, 0.14, 'triangle', 0.22, 0.08); },
+    octopus: () => tone(220, 0.28, 'sawtooth', 0.18, 0, 90),
+    mine: () => { tone(130, 0.3, 'square', 0.26, 0, 40); tone(60, 0.35, 'sine', 0.22, 0.02); },
+    jackpot: () => [660, 880, 1100, 1320, 1560].forEach((f, i) => tone(f, 0.16, 'triangle', 0.22, i * 0.06)),
+    start: () => { tone(440, 0.1, 'sine', 0.2, 0); tone(660, 0.12, 'sine', 0.2, 0.09); }
+  };
+
+  /* ---------------------------- config ---------------------------- */
+  const ROUND_TIME = 60;
+  const EMOJI = { blue: '🦀', golden: '⭐', octopus: '🐙', treasure: '💎' };
+
+  /* ---------------------------- state ---------------------------- */
+  let state = 'menu';
+  let boat, creatures, mines, particles, floaters, pylons;
+  let score, combo, comboMult, timeLeft, spawnTimer, mineTimer, shake, frenzy, stats;
+  const pointer = { active: false, x: 0, y: 0, offsetY: 0 };
+  const keys = {};
+
+  function dist(x1, y1, x2, y2) { return Math.hypot(x1 - x2, y1 - y2); }
+  function lerp(a, b, t) { return a + (b - a) * Math.max(0, Math.min(1, t)); }
+  function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
+  function dockHeight() { return Math.max(60, H * 0.09); }
+
+  function computePylons() {
+    pylons = [];
+    if (!W) return;
+    const dockH = dockHeight();
+    const count = Math.max(3, Math.round(W / 260));
+    for (let i = 0; i < count; i++) {
+      const x = (i + 0.5) * (W / count);
+      pylons.push({ x, y: dockH + 20, r: 16 });
+    }
+  }
+
+  function resetGame() {
+    boat = { x: W / 2, y: H * 0.62, tx: W / 2, ty: H * 0.62, vx: 0, vy: 0, angle: 0, wake: [] };
+    creatures = [];
+    mines = [];
+    particles = [];
+    floaters = [];
+    score = 0; combo = 0; comboMult = 1;
+    timeLeft = ROUND_TIME;
+    spawnTimer = 500; mineTimer = 2200;
+    shake = 0; frenzy = false;
+    stats = { blue: 0, golden: 0, jackpot: 0, octopus: 0, mines: 0 };
+  }
+
+  /* ---------------------------- spawning ---------------------------- */
+  function pickType() {
+    const table = [['blue', 50], ['octopus', 20], ['golden', 15], ['treasure', 5]];
+    const total = table.reduce((s, t) => s + t[1], 0);
+    let r = Math.random() * total;
+    for (const [type, w] of table) { if (r < w) return type; r -= w; }
+    return 'blue';
+  }
+
+  function spawnCreature(progress) {
+    const maxConcurrent = Math.min(6, 2 + Math.floor(progress * 5));
+    if (creatures.filter(c => !c.caught).length >= maxConcurrent) return;
+    const type = pickType();
+    const margin = 50;
+    const dockH = dockHeight();
+    let x = 0, y = 0, ok = false, tries = 0;
+    do {
+      x = margin + Math.random() * (W - margin * 2);
+      y = dockH + 70 + Math.random() * Math.max(40, H - dockH - 70 - margin);
+      ok = !pylons.some(p => dist(x, y, p.x, p.y) < p.r + 40) &&
+           !creatures.some(c => !c.caught && dist(x, y, c.x, c.y) < 70);
+      tries++;
+    } while (!ok && tries < 20);
+    const life = lerp(2600, 1250, progress);
+    creatures.push({ type, x, y, born: performance.now(), phase: 'rising', life, scale: 0, caught: false });
+  }
+
+  function spawnMine(progress) {
+    if (mines.length >= Math.min(5, 2 + Math.floor(progress * 4))) return;
+    const dockH = dockHeight();
+    const fromLeft = Math.random() < 0.5;
+    const y = dockH + 90 + Math.random() * Math.max(40, H - dockH - 160);
+    const speed = lerp(28, 72, progress);
+    mines.push({
+      x: fromLeft ? -30 : W + 30, y,
+      vx: (fromLeft ? 1 : -1) * speed,
+      vy: (Math.random() - 0.5) * 10,
+      rot: 0
+    });
+  }
+
+  /* ---------------------------- effects ---------------------------- */
+  function burst(x, y, color, n, big) {
+    for (let i = 0; i < n; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const sp = (big ? 90 : 60) * (0.4 + Math.random());
+      particles.push({
+        x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - (big ? 40 : 10),
+        life: 0.5 + Math.random() * 0.4, color, gravity: true,
+        size: big ? 4 + Math.random() * 3 : 2 + Math.random() * 2
+      });
+    }
+  }
+  function addFloater(x, y, text, color) {
+    floaters.push({ x, y, text, color, vy: -42, life: 1.0 });
+  }
+
+  /* ---------------------------- collisions ---------------------------- */
+  function updateComboMult() { comboMult = 1 + Math.min(4, Math.floor(combo / 5)); }
+
+  function catchCreature(c) {
+    c.caught = true; c.caughtAt = performance.now();
+    const mult = frenzy ? 2 : 1;
+    if (c.type === 'blue') {
+      combo++; updateComboMult();
+      const pts = 10 * comboMult * mult;
+      score += pts; stats.blue++;
+      addFloater(c.x, c.y, '+' + pts, '#bff2ff');
+      sfx.blue(); burst(c.x, c.y, '#4fd0ff', 10);
+    } else if (c.type === 'golden') {
+      combo++; updateComboMult();
+      const pts = 50 * comboMult * mult;
+      score += pts; stats.golden++;
+      addFloater(c.x, c.y, '+' + pts, '#ffd35c');
+      sfx.golden(); burst(c.x, c.y, '#ffd35c', 16);
+    } else if (c.type === 'octopus') {
+      combo = 0; comboMult = 1;
+      score = Math.max(0, score - 10); stats.octopus++;
+      addFloater(c.x, c.y, '-10', '#ff5c7a');
+      sfx.octopus(); burst(c.x, c.y, '#8a4fd0', 14);
+      shake = Math.max(shake, 0.3);
+    } else if (c.type === 'treasure') {
+      const pts = 100 * mult;
+      combo += 3; updateComboMult();
+      score += pts; stats.jackpot++;
+      addFloater(c.x, c.y, 'JACKPOT +' + pts, '#7affc0');
+      sfx.jackpot(); burst(c.x, c.y, '#7affc0', 26, true);
+      shake = Math.max(shake, 0.15);
+    }
+  }
+
+  function hitMine(m) {
+    timeLeft = Math.max(0, timeLeft - 5);
+    combo = 0; comboMult = 1; stats.mines++;
+    addFloater(m.x, m.y, '-5s', '#ff8a4c');
+    sfx.mine(); burst(m.x, m.y, '#ff8a4c', 24, true);
+    shake = 0.6;
+  }
+
+  /* ---------------------------- boat ---------------------------- */
+  function updateBoat(dt) {
+    const dockH = dockHeight();
+    const accel = 900;
+    let kx = 0, ky = 0;
+    if (keys['arrowleft'] || keys['a']) kx -= 1;
+    if (keys['arrowright'] || keys['d']) kx += 1;
+    if (keys['arrowup'] || keys['w']) ky -= 1;
+    if (keys['arrowdown'] || keys['s']) ky += 1;
+
+    if (pointer.active) {
+      boat.tx = pointer.x; boat.ty = pointer.y;
+      const ease = Math.min(1, dt * 9);
+      const nx = boat.x + (boat.tx - boat.x) * ease;
+      const ny = boat.y + (boat.ty - boat.y) * ease;
+      boat.vx = (nx - boat.x) / Math.max(dt, 0.001);
+      boat.vy = (ny - boat.y) / Math.max(dt, 0.001);
+      boat.x = nx; boat.y = ny;
+    } else if (kx || ky) {
+      const len = Math.hypot(kx, ky) || 1;
+      boat.vx = (boat.vx || 0) + (kx / len) * accel * dt;
+      boat.vy = (boat.vy || 0) + (ky / len) * accel * dt;
+      boat.vx *= 0.9; boat.vy *= 0.9;
+      boat.x += boat.vx * dt; boat.y += boat.vy * dt;
+    } else {
+      boat.vx *= 0.85; boat.vy *= 0.85;
+      boat.x += boat.vx * dt; boat.y += boat.vy * dt;
+    }
+
+    pylons.forEach(p => {
+      const d = dist(boat.x, boat.y, p.x, p.y);
+      const minD = p.r + 22;
+      if (d < minD && d > 0.001) {
+        const ang = Math.atan2(boat.y - p.y, boat.x - p.x);
+        boat.x = p.x + Math.cos(ang) * minD;
+        boat.y = p.y + Math.sin(ang) * minD;
+      }
+    });
+
+    boat.x = clamp(boat.x, 24, W - 24);
+    boat.y = clamp(boat.y, dockH + 40, H - 24);
+
+    const speed = Math.hypot(boat.vx, boat.vy);
+    if (speed > 4) {
+      const targetAngle = Math.atan2(boat.vy, boat.vx);
+      let da = targetAngle - boat.angle;
+      da = Math.atan2(Math.sin(da), Math.cos(da));
+      boat.angle += da * Math.min(1, dt * 6);
+    }
+
+    boat.wake.push({ x: boat.x, y: boat.y + 14, life: 0.5 });
+    boat.wake.forEach(w => (w.life -= dt));
+    boat.wake = boat.wake.filter(w => w.life > 0);
+  }
+
+  /* ---------------------------- update ---------------------------- */
+  function update(dt, now) {
+    if (state !== 'playing') return;
+    timeLeft -= dt;
+    const progress = 1 - timeLeft / ROUND_TIME;
+    frenzy = timeLeft <= 10 && timeLeft > 0;
+    frenzyBanner.classList.toggle('hidden', !frenzy);
+    timeBox.classList.toggle('low', timeLeft <= 10);
+
+    if (timeLeft <= 0) { timeLeft = 0; endGame(); return; }
+
+    updateBoat(dt);
+
+    spawnTimer -= dt * 1000;
+    if (spawnTimer <= 0) {
+      spawnCreature(progress);
+      const base = lerp(1100, 380, progress) * (frenzy ? 0.55 : 1);
+      spawnTimer = base * (0.75 + Math.random() * 0.5);
+    }
+    mineTimer -= dt * 1000;
+    if (mineTimer <= 0) {
+      spawnMine(progress);
+      const base = lerp(3000, 1300, progress) * (frenzy ? 0.6 : 1);
+      mineTimer = base * (0.7 + Math.random() * 0.6);
+    }
+
+    creatures.forEach(c => {
+      const age = now - c.born;
+      if (!c.caught) {
+        if (c.phase === 'rising') {
+          c.scale = Math.min(1, age / 220);
+          if (c.scale >= 1) { c.phase = 'idle'; c.idleStart = now; }
+        } else if (c.phase === 'idle') {
+          if (now - c.idleStart > c.life) { c.phase = 'sinking'; c.sinkStart = now; }
+        } else if (c.phase === 'sinking') {
+          const sAge = now - c.sinkStart;
+          c.scale = Math.max(0, 1 - sAge / 220);
+          if (c.scale <= 0) c.dead = true;
+        }
+        if (!c.dead && (c.phase !== 'sinking' || c.scale > 0.3)) {
+          if (dist(boat.x, boat.y, c.x, c.y) < 34) catchCreature(c);
+        }
+      } else {
+        const cAge = now - c.caughtAt;
+        c.scale = Math.max(0, 1 - cAge / 260);
+        if (cAge > 260) c.dead = true;
+      }
+    });
+    creatures = creatures.filter(c => !c.dead);
+
+    mines.forEach(m => {
+      m.x += m.vx * dt; m.y += m.vy * dt; m.rot += dt * 2;
+      if (dist(boat.x, boat.y, m.x, m.y) < 34) { hitMine(m); m.dead = true; }
+      if (m.x < -60 || m.x > W + 60) m.dead = true;
+    });
+    mines = mines.filter(m => !m.dead);
+
+    particles.forEach(p => {
+      p.x += p.vx * dt; p.y += p.vy * dt;
+      if (p.gravity) p.vy += 200 * dt;
+      p.life -= dt;
+    });
+    particles = particles.filter(p => p.life > 0);
+
+    floaters.forEach(f => { f.y += f.vy * dt; f.life -= dt; });
+    floaters = floaters.filter(f => f.life > 0);
+
+    if (shake > 0) shake = Math.max(0, shake - dt * 3);
+
+    scoreVal.textContent = Math.round(score);
+    timeVal.textContent = Math.ceil(timeLeft);
+    comboBox.textContent = comboMult > 1 ? ('COMBO x' + comboMult) : '';
+  }
+
+  /* ---------------------------- render ---------------------------- */
+  function drawWater(now) {
+    const grad = ctx.createLinearGradient(0, 0, 0, H);
+    grad.addColorStop(0, '#1b6fa8');
+    grad.addColorStop(0.5, '#0f4f82');
+    grad.addColorStop(1, '#083a63');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, W, H);
+    ctx.strokeStyle = 'rgba(255,255,255,0.08)';
+    ctx.lineWidth = 2;
+    const t = now / 1000;
+    for (let i = 0; i < 6; i++) {
+      ctx.beginPath();
+      const yBase = (H / 6) * i + 40;
+      for (let x = 0; x <= W; x += 24) {
+        const y = yBase + Math.sin(x * 0.02 + t * 1.4 + i) * 6;
+        if (x === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+      }
+      ctx.stroke();
+    }
+  }
+
+  function drawDock() {
+    const dockH = dockHeight();
+    const grad = ctx.createLinearGradient(0, 0, 0, dockH);
+    grad.addColorStop(0, '#8a5a34');
+    grad.addColorStop(1, '#6b4426');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, W, dockH);
+    ctx.strokeStyle = 'rgba(0,0,0,0.25)';
+    ctx.lineWidth = 2;
+    for (let x = 0; x < W; x += 34) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, dockH); ctx.stroke(); }
+    ctx.fillStyle = 'rgba(0,0,0,0.2)';
+    ctx.fillRect(0, dockH - 4, W, 4);
+    pylons.forEach(p => {
+      ctx.fillStyle = '#5c3a20';
+      ctx.fillRect(p.x - 6, dockH - 6, 12, Math.max(0, p.y - dockH + 6 + p.r));
+      ctx.beginPath();
+      ctx.fillStyle = '#7a4d2a';
+      ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(0,0,0,0.3)';
+      ctx.stroke();
+    });
+  }
+
+  function drawWake() {
+    boat.wake.forEach(w => {
+      ctx.globalAlpha = Math.max(0, w.life / 0.5) * 0.4;
+      ctx.strokeStyle = '#eaf6ff';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(w.x, w.y, 10 * (1 - w.life / 0.5), 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+    });
+  }
+
+  function drawMine(m, now) {
+    const bob = Math.sin(now / 300 + m.x * 0.05) * 4;
+    ctx.save();
+    ctx.translate(m.x, m.y + bob);
+    ctx.rotate(m.rot);
+    ctx.font = '32px serif';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText('🧨', 0, 0);
+    ctx.restore();
+  }
+
+  function drawCreature(c, now) {
+    const bob = c.phase === 'idle' ? Math.sin(now / 220 + c.x) * 3 : 0;
+    ctx.save();
+    ctx.translate(c.x, c.y + bob);
+    ctx.scale(Math.max(0.001, c.scale), Math.max(0.001, c.scale));
+    if (c.type === 'golden') { ctx.shadowColor = '#ffd35c'; ctx.shadowBlur = 18; }
+    else if (c.type === 'treasure') { ctx.shadowColor = '#7affc0'; ctx.shadowBlur = 22; }
+    ctx.font = (c.type === 'treasure' ? '40px serif' : '36px serif');
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(EMOJI[c.type], 0, 0);
+    ctx.restore();
+  }
+
+  function drawBoat() {
+    ctx.save();
+    ctx.translate(boat.x, boat.y);
+    ctx.rotate(boat.angle);
+    ctx.beginPath();
+    ctx.moveTo(-26, -6);
+    ctx.quadraticCurveTo(-30, 10, -14, 14);
+    ctx.lineTo(20, 14);
+    ctx.quadraticCurveTo(30, 10, 24, -6);
+    ctx.closePath();
+    const hullGrad = ctx.createLinearGradient(-26, -6, 24, 14);
+    hullGrad.addColorStop(0, '#ff8a4c');
+    hullGrad.addColorStop(1, '#e8672c');
+    ctx.fillStyle = hullGrad;
+    ctx.fill();
+    ctx.strokeStyle = '#7a3010'; ctx.lineWidth = 2; ctx.stroke();
+    ctx.fillStyle = '#fff3e0';
+    ctx.fillRect(-8, -16, 16, 10);
+    ctx.strokeStyle = '#7a3010'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(0, -16); ctx.lineTo(0, -32); ctx.stroke();
+    ctx.font = '16px serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText('🦀', 8, -28);
+    ctx.restore();
+  }
+
+  function render(now) {
+    ctx.save();
+    ctx.clearRect(0, 0, W, H);
+    if (shake > 0) {
+      ctx.translate((Math.random() - 0.5) * shake * 20, (Math.random() - 0.5) * shake * 20);
+    }
+    drawWater(now);
+    drawDock();
+    drawWake();
+    mines.forEach(m => drawMine(m, now));
+    creatures.slice().sort((a, b) => a.y - b.y).forEach(c => drawCreature(c, now));
+    drawBoat();
+    particles.forEach(p => {
+      ctx.globalAlpha = Math.max(0, p.life / 0.7);
+      ctx.fillStyle = p.color;
+      ctx.beginPath(); ctx.arc(p.x, p.y, p.size || 3, 0, Math.PI * 2); ctx.fill();
+      ctx.globalAlpha = 1;
+    });
+    floaters.forEach(f => {
+      ctx.globalAlpha = Math.max(0, f.life);
+      ctx.font = (f.text.indexOf('JACKPOT') >= 0 ? '700 22px "Baloo 2", sans-serif' : '700 20px "Baloo 2", sans-serif');
+      ctx.fillStyle = f.color;
+      ctx.textAlign = 'center';
+      ctx.fillText(f.text, f.x, f.y);
+      ctx.globalAlpha = 1;
+    });
+    ctx.restore();
+  }
+
+  /* ---------------------------- loop ---------------------------- */
+  let lastT = performance.now();
+  function loop(now) {
+    const dt = Math.min(0.05, (now - lastT) / 1000);
+    lastT = now;
+    update(dt, now);
+    render(now);
+    requestAnimationFrame(loop);
+  }
+
+  /* ---------------------------- screens ---------------------------- */
+  function startGame() {
+    audioInit();
+    Object.keys(keys).forEach(k => { keys[k] = false; });
+    resetGame();
+    computePylons();
+    state = 'playing';
+    startScreen.classList.add('hidden');
+    overScreen.classList.add('hidden');
+    hud.classList.remove('hidden');
+    sfx.start();
+  }
+  function endGame() {
+    state = 'over';
+    hud.classList.add('hidden');
+    frenzyBanner.classList.add('hidden');
+    comboBox.textContent = '';
+    finalScoreEl.textContent = Math.round(score);
+    statsLineEl.textContent = '🦀 ' + stats.blue + '   ⭐ ' + stats.golden + '   💎 ' + stats.jackpot +
+      '   🐙 ' + stats.octopus + ' hits   🧨 ' + stats.mines + ' hits';
+    overScreen.classList.remove('hidden');
+  }
+  playBtn.addEventListener('click', startGame);
+  againBtn.addEventListener('click', startGame);
+
+  /* ---------------------------- input ---------------------------- */
+  const TOUCH_LIFT = 90; // px the boat sits above a touch, so the finger doesn't cover it
+  function pointerPos(e) {
+    const rect = canvas.getBoundingClientRect();
+    const t = (e.touches && e.touches[0]) ? e.touches[0] : e;
+    return { x: t.clientX - rect.left, y: t.clientY - rect.top };
+  }
+  canvas.addEventListener('pointerdown', e => {
+    pointer.active = true;
+    pointer.offsetY = (e.pointerType === 'touch') ? TOUCH_LIFT : 0;
+    const p = pointerPos(e); pointer.x = p.x; pointer.y = p.y - pointer.offsetY;
+    audioInit();
+  });
+  canvas.addEventListener('pointermove', e => {
+    if (pointer.active) { const p = pointerPos(e); pointer.x = p.x; pointer.y = p.y - pointer.offsetY; }
+  });
+  window.addEventListener('pointerup', () => { pointer.active = false; });
+  window.addEventListener('pointercancel', () => { pointer.active = false; });
+  window.addEventListener('keydown', e => { keys[e.key.toLowerCase()] = true; });
+  window.addEventListener('keyup', e => { keys[e.key.toLowerCase()] = false; });
+
+  /* ---------------------------- boot ---------------------------- */
+  resize();
+  resetGame();
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
