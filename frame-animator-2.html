@@ -206,7 +206,7 @@ async function addFiles(files) {
     if (isHeic) {
       try {
         status.textContent = `Converting HEIC image: ${file.name}...`;
-        const converted = await heic2any({ blob: file, toType: 'image/jpeg', quality: 0.9 });
+        const converted = await heic2any({ blob: file, toType: 'image/jpeg', quality: 0.95 });
         processedBlob = Array.isArray(converted) ? converted[0] : converted;
       } catch (err) {
         console.error('Error converting HEIC image:', err);
@@ -343,12 +343,15 @@ document.getElementById('create').onclick = async () => {
 
   stopPlayback();
   const requested = document.getElementById('format').value;
-  status.textContent = 'Creating your animation...';
+  status.textContent = 'Creating your high-quality animation...';
 
+  // High-resolution export setup
   const canvas = document.createElement('canvas');
-  canvas.width = 1280;
-  canvas.height = 720;
+  canvas.width = 1920;
+  canvas.height = 1080;
   const ctx = canvas.getContext('2d');
+  ctx.imageSmoothingQuality = 'high';
+  
   const stream = canvas.captureStream(Number(fps.value));
 
   const mp4Types = [
@@ -378,7 +381,12 @@ document.getElementById('create').onclick = async () => {
     return;
   }
 
-  const recorder = new MediaRecorder(stream, {mimeType:mime});
+  // Set high bitrate (8 Mbps)
+  const recorder = new MediaRecorder(stream, {
+    mimeType: mime,
+    videoBitsPerSecond: 8000000 
+  });
+  
   const chunks = [];
   recorder.ondataavailable = e => { if (e.data.size) chunks.push(e.data); };
 
@@ -420,7 +428,7 @@ document.getElementById('create').onclick = async () => {
   document.querySelector('.bottom > div:last-child').prepend(a);
 
   status.textContent = actualMp4
-    ? 'Done. Your MPEG / MP4 movie is ready.'
+    ? 'Done. Your high-quality MPEG / MP4 movie is ready.'
     : 'Done. Your browser could not create MPEG / MP4 directly, so a WebM movie was created instead.';
 };
 
