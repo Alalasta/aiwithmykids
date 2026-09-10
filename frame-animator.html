@@ -1,0 +1,496 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Frame Animator</title>
+<!-- HEIC Conversion Library -->
+<script src="https://unpkg.com/heic2any@0.0.4/dist/heic2any.min.js"></script>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    background: #f5f5f3;
+    color: #202020;
+  }
+  .app { max-width: 1100px; margin: 0 auto; padding: 28px 20px 50px; }
+  header { display:flex; justify-content:space-between; align-items:center; margin-bottom:22px; }
+  h1 { margin:0; font-size:28px; letter-spacing:-.6px; }
+  .sub { color:#777; margin-top:5px; font-size:14px; }
+  .card {
+    background:white; border:1px solid #ddd; border-radius:16px;
+    padding:18px; box-shadow:0 2px 8px rgba(0,0,0,.04);
+  }
+  .preview {
+    min-height:430px; display:flex; align-items:center; justify-content:center;
+    background:#111; border-radius:12px; overflow:hidden; position:relative;
+  }
+  .preview img { max-width:100%; max-height:430px; object-fit:contain; display:none; }
+  .empty { color:#999; text-align:center; padding:30px; }
+  .controls { display:flex; flex-wrap:wrap; gap:12px; align-items:center; margin-top:14px; }
+  button, select, input[type=range] {
+    font:inherit;
+  }
+  button {
+    border:1px solid #ccc; background:white; padding:10px 15px;
+    border-radius:9px; cursor:pointer;
+  }
+  button:hover { background:#f2f2f2; }
+  .primary { background:#202020; color:white; border-color:#202020; font-weight:600; }
+  .primary:hover { background:#000; }
+  .danger { color:#b00020; }
+  .speed { flex:1; min-width:230px; }
+  .speedline { display:flex; align-items:center; gap:10px; font-size:13px; color:#666; }
+  .speedline input { flex:1; }
+  .frames-head { display:flex; justify-content:space-between; align-items:center; margin:24px 0 12px; }
+  .frames-head h2 { margin:0; font-size:18px; }
+  .count { color:#777; font-size:13px; }
+  .drop {
+    border:2px dashed #cfcfcf; border-radius:12px; padding:24px;
+    text-align:center; color:#777; margin-bottom:14px; cursor:pointer;
+  }
+  .drop.drag { background:#f0f0f0; border-color:#777; }
+  .drop strong { color:#222; }
+  #fileInput { display:none; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(120px,1fr)); gap:12px; }
+  .frame {
+    position:relative; background:#f1f1f1; border:2px solid transparent;
+    border-radius:10px; overflow:hidden; cursor:grab; aspect-ratio:1;
+  }
+  .frame.dragging { opacity:.45; }
+  .frame img { width:100%; height:100%; object-fit:cover; display:block; }
+  .num {
+    position:absolute; top:6px; left:6px; background:rgba(0,0,0,.75);
+    color:white; border-radius:6px; padding:3px 7px; font-size:12px;
+  }
+  .remove {
+    position:absolute; top:5px; right:5px; width:27px; height:27px;
+    padding:0; border:0; border-radius:50%; background:rgba(255,255,255,.92);
+    font-size:18px; line-height:27px;
+  }
+  .tip { color:#888; font-size:12px; margin-top:9px; }
+  .bottom { display:flex; justify-content:space-between; gap:12px; flex-wrap:wrap; margin-top:18px; }
+  .status { color:#777; font-size:13px; display:flex; align-items:center; }
+  @media(max-width:600px) {
+    .preview { min-height:300px; }
+    .preview img { max-height:300px; }
+    h1 { font-size:24px; }
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <div>
+      <h1>Frame Animator</h1>
+      <div class="sub">Turn your pictures into a simple frame-by-frame movie.</div>
+    </div>
+  </header>
+
+  <section class="card">
+    <div class="preview">
+      <img id="previewImg" alt="Animation preview">
+      <div id="emptyPreview" class="empty">Add some pictures to get started.</div>
+    </div>
+
+    <div class="controls">
+      <button id="prev">←</button>
+      <button id="play">▶ Play</button>
+      <button id="next">→</button>
+
+      <div class="speed">
+        <div class="speedline">
+          <span>Slower</span>
+          <input id="fps" type="range" min="1" max="24" value="8">
+          <span>Faster</span>
+          <strong id="fpsLabel">8 fps</strong>
+        </div>
+      </div>
+
+      <label>
+  Loops:
+  <select id="loops" title="Number of times the animation repeats">
+    <option value="1">1</option>
+    <option value="2">2</option>
+    <option value="3">3</option>
+    <option value="4">4</option>
+    <option value="5">5</option>
+    <option value="6">6</option>
+    <option value="8">8</option>
+    <option value="10">10</option>
+    <option value="15">15</option>
+    <option value="20">20</option>
+    <option value="0">Forever</option>
+  </select>
+</label>
+    </div>
+
+    <div class="frames-head">
+      <h2>Your frames</h2>
+      <span id="count" class="count">0 pictures</span>
+    </div>
+
+    <label class="drop" id="drop">
+      <strong>＋ Add Pictures</strong><br>
+      Drag pictures here, or click to choose them.
+      <input id="fileInput" type="file" accept="image/*,.heic,.heif" multiple>
+    </label>
+
+    <div id="grid" class="grid"></div>
+    <div class="tip">Drag a picture to change its order. Click × to remove one. Loops controls how many times the complete animation plays.</div>
+
+    <div class="bottom">
+      <div id="status" class="status">Everything happens in your browser. Your pictures stay on your computer.</div>
+      <div>
+        <button id="clear" class="danger">Clear All</button>
+        <select id="format" title="Export format">
+          <option value="mpeg">MPEG / MP4</option>
+          <option value="webm">WebM</option>
+        </select>
+        <button id="create" class="primary">Create Animation</button>
+      </div>
+    </div>
+  </section>
+</div>
+
+<script>
+const frames = [];
+let current = 0;
+let timer = null;
+let playing = false;
+let dragIndex = null;
+
+const fileInput = document.getElementById('fileInput');
+const drop = document.getElementById('drop');
+const grid = document.getElementById('grid');
+const previewImg = document.getElementById('previewImg');
+const emptyPreview = document.getElementById('emptyPreview');
+const count = document.getElementById('count');
+const fps = document.getElementById('fps');
+const fpsLabel = document.getElementById('fpsLabel');
+const playBtn = document.getElementById('play');
+const status = document.getElementById('status');
+
+fps.addEventListener('input', () => {
+  fpsLabel.textContent = fps.value + ' fps';
+  if (playing) startPlayback();
+});
+
+drop.addEventListener('click', () => fileInput.click());
+fileInput.addEventListener('change', e => {
+  addFiles(e.target.files);
+  e.target.value = '';
+});
+
+['dragenter','dragover'].forEach(ev => drop.addEventListener(ev, e => {
+  e.preventDefault(); drop.classList.add('drag');
+}));
+['dragleave','drop'].forEach(ev => drop.addEventListener(ev, e => {
+  e.preventDefault(); drop.classList.remove('drag');
+}));
+drop.addEventListener('drop', e => addFiles(e.dataTransfer.files));
+
+async function addFiles(files) {
+  const fileArray = [...files];
+  const validFiles = fileArray.filter(f => f.type.startsWith('image/') || /\.(heic|heif)$/i.test(f.name));
+  
+  if (!validFiles.length) return;
+
+  status.textContent = 'Processing image files...';
+
+  for (const file of validFiles) {
+    let processedBlob = file;
+    const isHeic = /\.(heic|heif)$/i.test(file.name) || file.type === 'image/heic' || file.type === 'image/heif';
+
+    if (isHeic) {
+      try {
+        status.textContent = `Converting HEIC image: ${file.name}...`;
+        const converted = await heic2any({ blob: file, toType: 'image/jpeg', quality: 0.9 });
+        processedBlob = Array.isArray(converted) ? converted[0] : converted;
+      } catch (err) {
+        console.error('Error converting HEIC image:', err);
+        status.textContent = `Failed to process HEIC file: ${file.name}`;
+        continue;
+      }
+    }
+
+    const url = URL.createObjectURL(processedBlob);
+    frames.push({ file: processedBlob, url });
+  }
+
+  status.textContent = 'Everything happens in your browser. Your pictures stay on your computer.';
+  current = Math.min(current, Math.max(0, frames.length - 1));
+  render();
+}
+
+function render() {
+  grid.innerHTML = '';
+  frames.forEach((frame, i) => {
+    const el = document.createElement('div');
+    el.className = 'frame';
+    el.draggable = true;
+    el.dataset.index = i;
+    el.innerHTML = `
+      <img src="${frame.url}" alt="Frame ${i+1}">
+      <span class="num">${i+1}</span>
+      <button class="remove" title="Remove">×</button>`;
+    el.querySelector('.remove').onclick = e => {
+      e.stopPropagation();
+      URL.revokeObjectURL(frame.url);
+      frames.splice(i, 1);
+      current = Math.min(current, Math.max(0, frames.length - 1));
+      render();
+    };
+    el.onclick = () => { current = i; showCurrent(); };
+    el.addEventListener('dragstart', () => { dragIndex = i; el.classList.add('dragging'); });
+    el.addEventListener('dragend', () => { el.classList.remove('dragging'); });
+    el.addEventListener('dragover', e => e.preventDefault());
+    el.addEventListener('drop', e => {
+      e.preventDefault();
+      const to = i;
+      if (dragIndex === null || dragIndex === to) return;
+      const moved = frames.splice(dragIndex, 1)[0];
+      frames.splice(to, 0, moved);
+      current = to;
+      dragIndex = null;
+      render();
+    });
+    grid.appendChild(el);
+  });
+
+  count.textContent = frames.length + (frames.length === 1 ? ' picture' : ' pictures');
+  showCurrent();
+}
+
+function showCurrent() {
+  if (!frames.length) {
+    previewImg.style.display = 'none';
+    emptyPreview.style.display = 'block';
+    return;
+  }
+  previewImg.src = frames[current].url;
+  previewImg.style.display = 'block';
+  emptyPreview.style.display = 'none';
+}
+
+function step(dir) {
+  if (!frames.length) return;
+  current += dir;
+  if (current >= frames.length) current = 0;
+  if (current < 0) current = frames.length - 1;
+  showCurrent();
+}
+
+document.getElementById('prev').onclick = () => step(-1);
+document.getElementById('next').onclick = () => step(1);
+
+playBtn.onclick = () => {
+  if (playing) stopPlayback();
+  else startPlayback();
+};
+
+function startPlayback() {
+  if (frames.length < 1) return;
+  stopPlayback(false);
+  playing = true;
+  playBtn.textContent = '⏸ Pause';
+
+  let completedLoops = 0;
+  timer = setInterval(() => {
+    if (current === frames.length - 1) {
+      completedLoops++;
+      const loops = Number(document.getElementById('loops').value);
+
+      if (loops !== 0 && completedLoops >= loops) {
+        stopPlayback();
+        return;
+      }
+      current = 0;
+      showCurrent();
+    } else {
+      current++;
+      showCurrent();
+    }
+  }, 1000 / Number(fps.value));
+}
+
+function stopPlayback(changeButton=true) {
+  clearInterval(timer);
+  timer = null;
+  playing = false;
+  if (changeButton) playBtn.textContent = '▶ Play';
+}
+
+document.getElementById('clear').onclick = () => {
+  stopPlayback();
+  frames.forEach(f => URL.revokeObjectURL(f.url));
+  frames.length = 0;
+  current = 0;
+  render();
+  status.textContent = 'Cleared.';
+};
+
+function getImageDimensions(src) {
+  return new Promise(resolve => {
+    const img = new Image();
+    img.onload = () => resolve({ width: img.naturalWidth, height: img.naturalHeight });
+    img.src = src;
+  });
+}
+
+document.getElementById('create').onclick = async () => {
+  if (!frames.length) {
+    status.textContent = 'Add at least one picture first.';
+    return;
+  }
+  if (!window.MediaRecorder) {
+    status.textContent = 'Your browser does not support movie creation. Try the latest Chrome or Edge.';
+    return;
+  }
+
+  stopPlayback();
+  const createBtn = document.getElementById('create');
+  createBtn.disabled = true;
+  const requested = document.getElementById('format').value;
+  status.textContent = 'Preparing video export...';
+
+  // Get image dimensions to determine orientation
+  const dims = await getImageDimensions(frames[0].url);
+  const isPortrait = dims.height >= dims.width;
+
+  // Cap at Full HD dimensions (1080x1920 for portrait, 1920x1080 for landscape)
+  const width = isPortrait ? 1080 : 1920;
+  const height = isPortrait ? 1920 : 1080;
+
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext('2d');
+  ctx.imageSmoothingQuality = 'high';
+
+  const stream = canvas.captureStream(Number(fps.value));
+
+  const mp4Types = [
+    'video/mp4;codecs=avc1.42E01E',
+    'video/mp4;codecs=avc1',
+    'video/mp4'
+  ];
+  const webmTypes = [
+    'video/webm;codecs=vp9',
+    'video/webm;codecs=vp8',
+    'video/webm'
+  ];
+
+  let mime = null;
+  if (requested === 'mpeg') {
+    mime = mp4Types.find(t => MediaRecorder.isTypeSupported(t));
+    if (!mime) {
+      status.textContent = 'This browser cannot directly create MPEG/MP4. Creating WebM instead...';
+      mime = webmTypes.find(t => MediaRecorder.isTypeSupported(t));
+    }
+  } else {
+    mime = webmTypes.find(t => MediaRecorder.isTypeSupported(t));
+  }
+
+  if (!mime) {
+    status.textContent = 'No supported video export format was found in this browser.';
+    createBtn.disabled = false;
+    return;
+  }
+
+  // 6 Mbps provides sharp 1080p quality without choking browser memory
+  const recorder = new MediaRecorder(stream, {
+    mimeType: mime,
+    videoBitsPerSecond: 6000000 
+  });
+
+  const chunks = [];
+  recorder.ondataavailable = e => { if (e.data.size) chunks.push(e.data); };
+
+  recorder.start();
+  const delay = 1000 / Number(fps.value);
+
+  const requestedLoops = Number(document.getElementById('loops').value);
+  const exportLoops = requestedLoops === 0 ? 1 : requestedLoops;
+
+  const totalFrames = exportLoops * frames.length;
+  let processedFrames = 0;
+
+  for (let loop = 0; loop < exportLoops; loop++) {
+    for (let i = 0; i < frames.length; i++) {
+      processedFrames++;
+      status.textContent = `Rendering video frame ${processedFrames} of ${totalFrames}...`;
+      await drawImageCover(frames[i].url, ctx, canvas.width, canvas.height);
+      await new Promise(r => setTimeout(r, delay));
+    }
+  }
+
+  await new Promise(resolve => {
+    recorder.onstop = resolve;
+    recorder.stop();
+  });
+
+  const actualMp4 = mime.startsWith('video/mp4');
+  const extension = actualMp4 ? 'mp4' : 'webm';
+  const blob = new Blob(chunks, {type:mime});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'frame-animation.' + extension;
+  a.textContent = actualMp4 ? 'Save MPEG / MP4' : 'Save WebM';
+  a.className = 'primary';
+  a.style.textDecoration = 'none';
+  a.style.display = 'inline-block';
+  a.style.padding = '10px 15px';
+  a.style.borderRadius = '9px';
+
+  const old = document.getElementById('saveMovie');
+  if (old) old.remove();
+  a.id = 'saveMovie';
+  document.querySelector('.bottom > div:last-child').prepend(a);
+
+  status.textContent = actualMp4
+    ? 'Done. Your full-screen MPEG / MP4 video is ready.'
+    : 'Done. Your browser could not create MPEG / MP4 directly, so a WebM video was created instead.';
+    
+  createBtn.disabled = false;
+};
+
+function drawImageCover(src, ctx, cw, ch) {
+  return new Promise(resolve => {
+    const img = new Image();
+    img.onload = () => {
+      const imgRatio = img.width / img.height;
+      const canvasRatio = cw / ch;
+      let renderW, renderH, offsetX, offsetY;
+
+      if (imgRatio > canvasRatio) {
+        renderH = ch;
+        renderW = ch * imgRatio;
+        offsetX = (cw - renderW) / 2;
+        offsetY = 0;
+      } else {
+        renderW = cw;
+        renderH = cw / imgRatio;
+        offsetX = 0;
+        offsetY = (ch - renderH) / 2;
+      }
+
+      ctx.drawImage(img, offsetX, offsetY, renderW, renderH);
+      requestAnimationFrame(resolve);
+    };
+    img.src = src;
+  });
+}
+
+document.addEventListener('keydown', e => {
+  if (e.code === 'Space' && document.activeElement.tagName !== 'INPUT') {
+    e.preventDefault(); playBtn.click();
+  }
+  if (e.key === 'ArrowLeft') step(-1);
+  if (e.key === 'ArrowRight') step(1);
+});
+</script>
+</body>
+</html>
