@@ -4,6 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Frame Animator</title>
+<!-- HEIC Conversion Library -->
+<script src="https://unpkg.com/heic2any@0.0.4/dist/heic2any.min.js"></script>
 <style>
   * { box-sizing: border-box; }
   body {
@@ -132,7 +134,7 @@
     <label class="drop" id="drop">
       <strong>＋ Add Pictures</strong><br>
       Drag pictures here, or click to choose them.
-      <input id="fileInput" type="file" accept="image/*" multiple>
+      <input id="fileInput" type="file" accept="image/*,.heic,.heif" multiple>
     </label>
 
     <div id="grid" class="grid"></div>
@@ -176,7 +178,10 @@ fps.addEventListener('input', () => {
 });
 
 drop.addEventListener('click', () => fileInput.click());
-fileInput.addEventListener('change', e => addFiles(e.target.files));
+fileInput.addEventListener('change', e => {
+  addFiles(e.target.files);
+  e.target.value = '';
+});
 
 ['dragenter','dragover'].forEach(ev => drop.addEventListener(ev, e => {
   e.preventDefault(); drop.classList.add('drag');
@@ -186,12 +191,35 @@ fileInput.addEventListener('change', e => addFiles(e.target.files));
 }));
 drop.addEventListener('drop', e => addFiles(e.dataTransfer.files));
 
-function addFiles(files) {
-  const images = [...files].filter(f => f.type.startsWith('image/'));
-  images.forEach(file => {
-    const url = URL.createObjectURL(file);
-    frames.push({file, url});
-  });
+async function addFiles(files) {
+  const fileArray = [...files];
+  const validFiles = fileArray.filter(f => f.type.startsWith('image/') || /\.(heic|heif)$/i.test(f.name));
+  
+  if (!validFiles.length) return;
+
+  status.textContent = 'Processing image files...';
+
+  for (const file of validFiles) {
+    let processedBlob = file;
+    const isHeic = /\.(heic|heif)$/i.test(file.name) || file.type === 'image/heic' || file.type === 'image/heif';
+
+    if (isHeic) {
+      try {
+        status.textContent = `Converting HEIC image: ${file.name}...`;
+        const converted = await heic2any({ blob: file, toType: 'image/jpeg', quality: 0.9 });
+        processedBlob = Array.isArray(converted) ? converted[0] : converted;
+      } catch (err) {
+        console.error('Error converting HEIC image:', err);
+        status.textContent = `Failed to process HEIC file: ${file.name}`;
+        continue;
+      }
+    }
+
+    const url = URL.createObjectURL(processedBlob);
+    frames.push({ file: processedBlob, url });
+  }
+
+  status.textContent = 'Everything happens in your browser. Your pictures stay on your computer.';
   current = Math.min(current, Math.max(0, frames.length - 1));
   render();
 }
@@ -274,7 +302,6 @@ function startPlayback() {
       completedLoops++;
       const loops = Number(document.getElementById('loops').value);
 
-      // 0 means forever. Otherwise stop after the requested number of passes.
       if (loops !== 0 && completedLoops >= loops) {
         stopPlayback();
         return;
@@ -287,6 +314,7 @@ function startPlayback() {
     }
   }, 1000 / Number(fps.value));
 }
+
 function stopPlayback(changeButton=true) {
   clearInterval(timer);
   timer = null;
@@ -323,8 +351,6 @@ document.getElementById('create').onclick = async () => {
   const ctx = canvas.getContext('2d');
   const stream = canvas.captureStream(Number(fps.value));
 
-  // Chrome/Edge can record MP4 on some systems. If MP4 recording is unavailable,
-  // fall back to WebM rather than pretending the file is MPEG.
   const mp4Types = [
     'video/mp4;codecs=avc1.42E01E',
     'video/mp4;codecs=avc1',
@@ -362,8 +388,6 @@ document.getElementById('create').onclick = async () => {
   const requestedLoops = Number(document.getElementById('loops').value);
   const exportLoops = requestedLoops === 0 ? 1 : requestedLoops;
 
-  // Export the complete animation the requested number of times.
-  // "Forever" cannot be exported as a finite movie, so it exports one pass.
   for (let loop = 0; loop < exportLoops; loop++) {
     for (let i = 0; i < frames.length; i++) {
       await drawImageFit(frames[i].url, ctx, canvas.width, canvas.height);
