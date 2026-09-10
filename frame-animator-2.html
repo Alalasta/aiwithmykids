@@ -331,6 +331,14 @@ document.getElementById('clear').onclick = () => {
   status.textContent = 'Cleared.';
 };
 
+function getImageDimensions(src) {
+  return new Promise(resolve => {
+    const img = new Image();
+    img.onload = () => resolve({ width: img.naturalWidth, height: img.naturalHeight });
+    img.src = src;
+  });
+}
+
 document.getElementById('create').onclick = async () => {
   if (!frames.length) {
     status.textContent = 'Add at least one picture first.';
@@ -343,15 +351,21 @@ document.getElementById('create').onclick = async () => {
 
   stopPlayback();
   const requested = document.getElementById('format').value;
-  status.textContent = 'Creating your high-quality animation...';
+  status.textContent = 'Preparing high-resolution video export...';
 
-  // High-resolution export setup
+  // Obtain native image dimensions from the first frame
+  const dims = await getImageDimensions(frames[0].url);
+  
+  // MediaRecorder requires even dimensions
+  const width = dims.width % 2 === 0 ? dims.width : dims.width - 1;
+  const height = dims.height % 2 === 0 ? dims.height : dims.height - 1;
+
   const canvas = document.createElement('canvas');
-  canvas.width = 1920;
-  canvas.height = 1080;
+  canvas.width = width;
+  canvas.height = height;
   const ctx = canvas.getContext('2d');
   ctx.imageSmoothingQuality = 'high';
-  
+
   const stream = canvas.captureStream(Number(fps.value));
 
   const mp4Types = [
@@ -381,12 +395,15 @@ document.getElementById('create').onclick = async () => {
     return;
   }
 
-  // Set high bitrate (8 Mbps)
+  // Calculate proportional bitrate based on resolution (approx. 15 Mbps for 4K, minimum 10 Mbps)
+  const pixelCount = width * height;
+  const calculatedBitrate = Math.max(10000000, Math.round((pixelCount / (1920 * 1080)) * 12000000));
+
   const recorder = new MediaRecorder(stream, {
     mimeType: mime,
-    videoBitsPerSecond: 8000000 
+    videoBitsPerSecond: calculatedBitrate
   });
-  
+
   const chunks = [];
   recorder.ondataavailable = e => { if (e.data.size) chunks.push(e.data); };
 
@@ -398,7 +415,7 @@ document.getElementById('create').onclick = async () => {
 
   for (let loop = 0; loop < exportLoops; loop++) {
     for (let i = 0; i < frames.length; i++) {
-      await drawImageFit(frames[i].url, ctx, canvas.width, canvas.height);
+      await drawImageFull(frames[i].url, ctx, canvas.width, canvas.height);
       await new Promise(r => setTimeout(r, delay));
     }
   }
@@ -428,19 +445,15 @@ document.getElementById('create').onclick = async () => {
   document.querySelector('.bottom > div:last-child').prepend(a);
 
   status.textContent = actualMp4
-    ? 'Done. Your high-quality MPEG / MP4 movie is ready.'
-    : 'Done. Your browser could not create MPEG / MP4 directly, so a WebM movie was created instead.';
+    ? 'Done. Your native-resolution MPEG / MP4 video is ready.'
+    : 'Done. Your browser could not create MPEG / MP4 directly, so a WebM video was created instead.';
 };
 
-function drawImageFit(src, ctx, cw, ch) {
+function drawImageFull(src, ctx, cw, ch) {
   return new Promise(resolve => {
     const img = new Image();
     img.onload = () => {
-      ctx.fillStyle = '#000';
-      ctx.fillRect(0,0,cw,ch);
-      const scale = Math.min(cw/img.width, ch/img.height);
-      const w = img.width * scale, h = img.height * scale;
-      ctx.drawImage(img, (cw-w)/2, (ch-h)/2, w, h);
+      ctx.drawImage(img, 0, 0, cw, ch);
       resolve();
     };
     img.src = src;
