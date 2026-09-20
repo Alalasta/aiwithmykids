@@ -990,6 +990,8 @@ function makeConfig(contentType, palette, w, h, densityMult, speedMult, customTe
     trailOverride: null,
     kaleido: false,
     kaleidoSegments: 6,
+    sphereWarp: false,
+    sphereStrength: 0.5,
     blackout: false,
     strobe: false,
     overlayText: "",
@@ -1476,6 +1478,79 @@ function drawKaleidoscope(ctx, source, w, h, segments) {
   }
   ctx.restore();
 }
+// Spherical mirror / fisheye post-process. Same trick as the kaleidoscope
+// above (clip a shape, draw a rescaled copy of the buffer into it) but
+// with concentric rings instead of pie wedges: each ring samples the
+// source at a different radius and redraws it at a different scale, which
+// approximates a bulge-through-glass lens effect without ever touching
+// individual pixels. Cheap for the same reason kaleidoscope is cheap, and
+// since both work from an off-screen buffer they can stack: run one into
+// a second buffer, then the other from that into the visible canvas.
+function drawSphereWarp(ctx, source, w, h, strength) {
+  const cx = w / 2,
+    cy = h / 2;
+  const maxRadius = Math.sqrt(cx * cx + cy * cy) + 4;
+  const rings = 28;
+  const power = 1 + clamp(strength, 0, 1) * 1.4;
+  ctx.save();
+  ctx.clearRect(0, 0, w, h);
+  for (let i = 0; i < rings; i++) {
+    const tOuter = (i + 1) / rings;
+    const rScreenOuter = tOuter * maxRadius;
+    const rScreenInner = i / rings * maxRadius;
+    const rSourceOuter = Math.pow(tOuter, power) * maxRadius;
+    const scale = rSourceOuter > 0.5 ? rScreenOuter / rSourceOuter : 1;
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(cx, cy, rScreenOuter, 0, Math.PI * 2);
+    if (i > 0) ctx.arc(cx, cy, rScreenInner, 0, Math.PI * 2);
+    ctx.clip("evenodd");
+    ctx.translate(cx, cy);
+    ctx.scale(scale, scale);
+    ctx.drawImage(source, -cx, -cy, w, h);
+    ctx.restore();
+  }
+  ctx.restore();
+}
+// Shared by both the control window and the Stage window's render loops.
+// Kaleidoscope and Sphere Mirror both work by rendering the real scene
+// into an off-screen buffer first, then compositing that buffer onto the
+// visible canvas with a geometric remap -- which means they can chain:
+// run one into a second buffer, then the other from that buffer onto the
+// screen. Falls straight through to a normal draw when neither is on.
+function renderFrame(ctx, g, bufferCanvasRef, bufferCanvas2Ref) {
+  const w = g.width,
+    h = g.height;
+  const needsKaleido = g.kaleido;
+  const needsSphere = g.sphereWarp;
+  const buf1 = bufferCanvasRef.current;
+  if ((!needsKaleido && !needsSphere) || !buf1) {
+    drawVisual(ctx, g);
+    return;
+  }
+  const bctx1 = buf1.getContext("2d");
+  if (!bctx1) {
+    drawVisual(ctx, g);
+    return;
+  }
+  drawVisual(bctx1, g);
+  const segments = g.kaleidoSegments || 6;
+  const strength = g.sphereStrength != null ? g.sphereStrength : 0.5;
+  if (needsKaleido && needsSphere && bufferCanvas2Ref.current) {
+    const buf2 = bufferCanvas2Ref.current;
+    const bctx2 = buf2.getContext("2d");
+    if (bctx2) {
+      drawKaleidoscope(bctx2, buf1, w, h, segments);
+      drawSphereWarp(ctx, buf2, w, h, strength);
+      return;
+    }
+  }
+  if (needsKaleido) {
+    drawKaleidoscope(ctx, buf1, w, h, segments);
+  } else if (needsSphere) {
+    drawSphereWarp(ctx, buf1, w, h, strength);
+  }
+}
 function stopAudio(audio) {
   if (!audio) return;
   try {
@@ -1513,6 +1588,7 @@ function applyLivePalette(g, palette) {
 function StageOutput() {
   const canvasRef = useRef(null);
   const bufferCanvasRef = useRef(null);
+  const bufferCanvas2Ref = useRef(null);
   const rafRef = useRef(null);
   const gRef = useRef(null);
   const [paused, setPaused] = useState(false);
@@ -1536,6 +1612,12 @@ function StageOutput() {
     buf.height = Math.floor(h * dpr);
     const bctx = buf.getContext("2d");
     if (bctx) bctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    if (!bufferCanvas2Ref.current) bufferCanvas2Ref.current = document.createElement("canvas");
+    const buf2 = bufferCanvas2Ref.current;
+    buf2.width = Math.floor(w * dpr);
+    buf2.height = Math.floor(h * dpr);
+    const bctx2 = buf2.getContext("2d");
+    if (bctx2) bctx2.setTransform(dpr, 0, 0, dpr, 0, 0);
     if (gRef.current) {
       gRef.current.width = w;
       gRef.current.height = h;
@@ -1561,6 +1643,8 @@ function StageOutput() {
     cfg.trailOverride = payload.trailOverrideVal === "auto" ? null : payload.trailOverrideVal === "on";
     cfg.kaleido = payload.kaleido;
     cfg.kaleidoSegments = payload.kaleidoSeg;
+    cfg.sphereWarp = !!payload.sphereWarp;
+    cfg.sphereStrength = payload.sphereStrength != null ? payload.sphereStrength : 0.5;
     cfg.blackout = !!payload.blackout;
     cfg.strobe = !!payload.strobe;
     cfg.overlayText = payload.overlayText || "";
@@ -1659,17 +1743,7 @@ function StageOutput() {
         const canvas = canvasRef.current;
         if (canvas) {
           const ctx = canvas.getContext("2d");
-          if (ctx) {
-            if (g.kaleido && bufferCanvasRef.current) {
-              const bctx = bufferCanvasRef.current.getContext("2d");
-              if (bctx) {
-                drawVisual(bctx, g);
-                drawKaleidoscope(ctx, bufferCanvasRef.current, g.width, g.height, g.kaleidoSegments || 6);
-              }
-            } else {
-              drawVisual(ctx, g);
-            }
-          }
+          if (ctx) renderFrame(ctx, g, bufferCanvasRef, bufferCanvas2Ref);
         }
       }
       rafRef.current = requestAnimationFrame(loop);
@@ -1739,6 +1813,7 @@ function StageOutput() {
 function Visualizer() {
   const canvasRef = useRef(null);
   const bufferCanvasRef = useRef(null);
+  const bufferCanvas2Ref = useRef(null);
   const rafRef = useRef(null);
   const gRef = useRef(null);
   const dprRef = useRef(1);
@@ -1784,6 +1859,8 @@ function Visualizer() {
   const [trailOverrideVal, setTrailOverrideVal] = useState("off");
   const [kaleidoOn, setKaleidoOn] = useState(false);
   const [kaleidoSegVal, setKaleidoSegVal] = useState(6);
+  const [sphereOn, setSphereOn] = useState(false);
+  const [sphereStrengthVal, setSphereStrengthVal] = useState(0.5);
   const [autoVjOn, setAutoVjOn] = useState(false);
   const [autoVjIntervalVal, setAutoVjIntervalVal] = useState(45);
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -1829,6 +1906,12 @@ function Visualizer() {
     buf.height = Math.floor(h * dpr);
     const bctx = buf.getContext("2d");
     if (bctx) bctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    if (!bufferCanvas2Ref.current) bufferCanvas2Ref.current = document.createElement("canvas");
+    const buf2 = bufferCanvas2Ref.current;
+    buf2.width = Math.floor(w * dpr);
+    buf2.height = Math.floor(h * dpr);
+    const bctx2 = buf2.getContext("2d");
+    if (bctx2) bctx2.setTransform(dpr, 0, 0, dpr, 0, 0);
     if (gRef.current) {
       gRef.current.width = w;
       gRef.current.height = h;
@@ -1970,6 +2053,8 @@ function Visualizer() {
       trailOverrideVal,
       kaleido: g.kaleido,
       kaleidoSeg: g.kaleidoSegments,
+      sphereWarp: g.sphereWarp,
+      sphereStrength: g.sphereStrength,
       blackout: g.blackout,
       strobe: g.strobe,
       overlayText: g.overlayText,
@@ -2524,6 +2609,20 @@ function Visualizer() {
       kaleidoSegments: seg
     });
   }
+  function setSphere(on) {
+    setSphereOn(on);
+    if (gRef.current) gRef.current.sphereWarp = on;
+    bcSend("mixer", {
+      sphereWarp: on
+    });
+  }
+  function setSphereStrength(v) {
+    setSphereStrengthVal(v);
+    if (gRef.current) gRef.current.sphereStrength = v;
+    bcSend("mixer", {
+      sphereStrength: v
+    });
+  }
   function triggerFlash() {
     if (gRef.current) {
       gRef.current.beatPulse = 1;
@@ -2841,6 +2940,8 @@ function Visualizer() {
     cfg.trailOverride = activeTrailOverrideVal === "auto" ? null : activeTrailOverrideVal === "on";
     cfg.kaleido = overrides.kaleido !== undefined ? overrides.kaleido : kaleidoOn;
     cfg.kaleidoSegments = overrides.kaleidoSeg !== undefined ? overrides.kaleidoSeg : kaleidoSegVal;
+    cfg.sphereWarp = sphereOn;
+    cfg.sphereStrength = sphereStrengthVal;
     cfg.blackout = blackoutOn;
     cfg.strobe = strobeOn;
     cfg.overlayText = overlayText;
@@ -2861,6 +2962,8 @@ function Visualizer() {
       trailOverrideVal: activeTrailOverrideVal,
       kaleido: cfg.kaleido,
       kaleidoSeg: cfg.kaleidoSegments,
+      sphereWarp: cfg.sphereWarp,
+      sphereStrength: cfg.sphereStrength,
       blackout: cfg.blackout,
       strobe: cfg.strobe,
       overlayText: cfg.overlayText,
@@ -2925,17 +3028,7 @@ function Visualizer() {
       const canvas = canvasRef.current;
       if (canvas) {
         const ctx = canvas.getContext("2d");
-        if (ctx) {
-          if (g.kaleido && bufferCanvasRef.current) {
-            const bctx = bufferCanvasRef.current.getContext("2d");
-            if (bctx) {
-              drawVisual(bctx, g);
-              drawKaleidoscope(ctx, bufferCanvasRef.current, g.width, g.height, g.kaleidoSegments || 6);
-            }
-          } else {
-            drawVisual(ctx, g);
-          }
-        }
+        if (ctx) renderFrame(ctx, g, bufferCanvasRef, bufferCanvas2Ref);
       }
       rafRef.current = requestAnimationFrame(loop);
     }
@@ -3230,6 +3323,28 @@ function Visualizer() {
   }), kaleidoOn && /*#__PURE__*/React.createElement("span", {
     style: mixerValueStyle
   }, kaleidoSegVal)), /*#__PURE__*/React.createElement("div", {
+    style: mixerRowStyle
+  }, /*#__PURE__*/React.createElement("span", {
+    style: mixerLabelStyle
+  }, "Sphere"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: 6
+    }
+  }, /*#__PURE__*/React.createElement("button", {
+    onClick: () => setSphere(!sphereOn),
+    style: mixerTinyBtnStyle(sphereOn)
+  }, sphereOn ? "on" : "off")), sphereOn && /*#__PURE__*/React.createElement("input", {
+    type: "range",
+    min: 0,
+    max: 1,
+    step: 0.05,
+    value: sphereStrengthVal,
+    onChange: e => setSphereStrength(parseFloat(e.target.value)),
+    style: mixerSliderStyle
+  }), sphereOn && /*#__PURE__*/React.createElement("span", {
+    style: mixerValueStyle
+  }, sphereStrengthVal.toFixed(2))), /*#__PURE__*/React.createElement("div", {
     style: mixerRowStyle
   }, /*#__PURE__*/React.createElement("span", {
     style: mixerLabelStyle
